@@ -30,6 +30,13 @@ backend/dist/
 backend/node_modules/.prisma/
 backend/prisma/ERD.svg
 
+# ─── Go build output ─────────────────────────────────────────────────────────
+# `go build -o server ./cmd/server` drops a ~20MB binary in backend/
+backend/server
+backend/server.exe
+backend/backfill
+backend/backfill.exe
+
 # ─── Logs ────────────────────────────────────────────────────────────────────
 logs/
 *.log

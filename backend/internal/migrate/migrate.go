@@ -309,6 +309,130 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			"order"       INTEGER     NOT NULL DEFAULT 0,
 			created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)`,
+
+		// ── Source registry (upstream tables we do not control) ───────────────
+		// One row per upstream table. The plant systems send whatever shape they
+		// send — a shared wide counter table, or one table per freezer — so the
+		// SHAPE IS DATA, not code: registering iqf4 is an INSERT here plus its
+		// metric rows below, with no deploy. The normalizer builds its SELECT from
+		// these expressions; nothing here ever comes from an end user.
+		// The watermark is always ts_expr's value, so one TEXT (RFC3339) column
+		// works whatever the upstream time column's type is — nj5_machines keeps
+		// epoch seconds, the freezers keep timestamptz, and both have an index
+		// matching their ts_expr. overlap_seconds re-reads a little of what was
+		// already read: upstream clocks drift and rows can land slightly out of
+		// order, and ON CONFLICT DO NOTHING makes the re-read free.
+		`CREATE TABLE IF NOT EXISTS source_tables (
+			id              SERIAL      PRIMARY KEY,
+			factory_id      UUID        NOT NULL REFERENCES factories(id) ON DELETE CASCADE,
+			table_name      TEXT        UNIQUE NOT NULL,
+			shape           TEXT        NOT NULL DEFAULT 'wide_sensor',
+			ts_expr         TEXT        NOT NULL,
+			machine_expr    TEXT        NOT NULL,
+			label_exprs     JSONB       NOT NULL DEFAULT '{}'::jsonb,
+			overlap_seconds INT         NOT NULL DEFAULT 120,
+			batch_rows      INT         NOT NULL DEFAULT 50000,
+			reader          TEXT        NOT NULL DEFAULT 'poll',
+			enabled         BOOLEAN     NOT NULL DEFAULT TRUE,
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`,
+		// One row per numeric column we actually serve. `kind` is what makes a
+		// wrong aggregation impossible: the compiler reads it, the model never
+		// picks. A column that is absent here is invisible to the LLM — that is how
+		// "rail_temp is all NULL" and "count_ng is always 0" are expressed now,
+		// instead of a paragraph of prompt prose asking the model to refuse.
+		// value_expr overrides column_name when the upstream type is not numeric
+		// (a boolean flag needs ::int). column_name stays the drift-check key.
+		`CREATE TABLE IF NOT EXISTS source_metrics (
+			id              SERIAL  PRIMARY KEY,
+			source_table_id INT     NOT NULL REFERENCES source_tables(id) ON DELETE CASCADE,
+			column_name     TEXT    NOT NULL,
+			value_expr      TEXT,
+			field_key       TEXT    NOT NULL,
+			kind            TEXT    NOT NULL DEFAULT 'gauge',
+			unit            TEXT,
+			sentinel        DOUBLE PRECISION,
+			valid_min       DOUBLE PRECISION,
+			valid_max       DOUBLE PRECISION,
+			llm_note        TEXT,
+			enabled         BOOLEAN NOT NULL DEFAULT TRUE,
+			updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			UNIQUE (source_table_id, column_name)
+		)`,
+		`CREATE TABLE IF NOT EXISTS source_state (
+			source_table_id INT         PRIMARY KEY REFERENCES source_tables(id) ON DELETE CASCADE,
+			last_watermark  TEXT,
+			last_run_at     TIMESTAMPTZ,
+			rows_ingested   BIGINT      NOT NULL DEFAULT 0,
+			last_error      TEXT
+		)`,
+
+		// ── Canonical model ──────────────────────────────────────────────────
+		// series = (machine, metric, labels). A cumulative counter's identity
+		// includes its labels — IQF2/OutFeed/Carb is a different counter from
+		// IQF2/OutFeed/Tray — so the delta is only ever computed per series.
+		`CREATE TABLE IF NOT EXISTS series (
+			id         BIGINT      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+			factory_id UUID        NOT NULL REFERENCES factories(id) ON DELETE CASCADE,
+			machine_id UUID        NOT NULL REFERENCES machines(id) ON DELETE CASCADE,
+			field_key  TEXT        NOT NULL,
+			labels     JSONB       NOT NULL DEFAULT '{}'::jsonb,
+			first_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			last_seen  TIMESTAMPTZ,
+			UNIQUE (machine_id, field_key, labels)
+		)`,
+		// quality: 0=ok, 1=sentinel, 2=out of valid range. Bad readings are KEPT
+		// and flagged, never dropped — the rollups filter on quality = 0, so a
+		// mis-registered sentinel can be fixed by re-registering, not re-ingesting.
+		`CREATE TABLE IF NOT EXISTS readings (
+			series_id BIGINT           NOT NULL REFERENCES series(id) ON DELETE CASCADE,
+			ts        TIMESTAMPTZ      NOT NULL,
+			value     DOUBLE PRECISION,
+			quality   SMALLINT         NOT NULL DEFAULT 0,
+			UNIQUE (series_id, ts)
+		)`,
+
+		// ── Canonical serving views ──────────────────────────────────────────
+		// Exactly two, plus the two rollups. This count does NOT grow when a
+		// plant, machine, metric or upstream table is added — that is the whole
+		// point of the registry. If you are about to add "v_<plant>…", add a
+		// source_tables row instead.
+		//
+		// v_series is the catalog the prompt generator and listing questions read.
+		//
+		// security_invoker is what makes the factory policy actually apply here: by
+		// default a view reads its base tables with the VIEW OWNER's rights, so
+		// v_series would happily return another plant's series to a caller that
+		// series itself would have blocked. With it, RLS is evaluated as the caller.
+		`CREATE OR REPLACE VIEW v_series WITH (security_invoker = true) AS
+		 SELECT s.id           AS series_id,
+		        f.id           AS factory_id,
+		        f.name         AS factory,
+		        m.name         AS machine,
+		        m.type         AS machine_type,
+		        s.field_key,
+		        cat.kind,
+		        cat.unit,
+		        s.labels,
+		        s.last_seen
+		 FROM series s
+		 JOIN machines m         ON m.id  = s.machine_id
+		 JOIN production_lines pl ON pl.id = m.production_line_id
+		 JOIN factories f        ON f.id  = pl.factory_id
+		 LEFT JOIN LATERAL (
+		     SELECT sm.kind, sm.unit
+		     FROM source_metrics sm
+		     JOIN source_tables st ON st.id = sm.source_table_id
+		     WHERE sm.field_key = s.field_key AND st.factory_id = s.factory_id
+		     LIMIT 1
+		 ) cat ON TRUE`,
+		// v_readings is raw readings with their dimensions spelled out, so the
+		// raw-SQL escape hatch has something safe to be pointed at.
+		`CREATE OR REPLACE VIEW v_readings WITH (security_invoker = true) AS
+		 SELECT r.series_id, r.ts, r.value, r.quality,
+		        vs.factory_id, vs.machine, vs.machine_type, vs.field_key, vs.kind, vs.labels
+		 FROM readings r
+		 JOIN v_series vs ON vs.series_id = r.series_id`,
 	}
 
 	for _, stmt := range ddl {
@@ -333,6 +457,12 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// Ask-Data charts saved before the zoomable-window change have their range baked
 		// into the SQL (now() - interval); NULL here means "run it as stored".
 		`ALTER TABLE ai_board_charts ADD COLUMN IF NOT EXISTS window_hours DOUBLE PRECISION`,
+		// Canonical charts store the query spec that produced them. It is recompiled on
+		// replay, so it keeps working when the relations underneath change — which is
+		// what lets the legacy views be retired without breaking saved boards.
+		`ALTER TABLE ai_board_charts ADD COLUMN IF NOT EXISTS spec       JSONB`,
+		`ALTER TABLE ai_board_charts ADD COLUMN IF NOT EXISTS factory_id UUID`,
+		`ALTER TABLE ai_boards       ADD COLUMN IF NOT EXISTS factory_id UUID`,
 	}
 	for _, stmt := range alertEventsMigrations {
 		if _, err := pool.Exec(ctx, stmt); err != nil {
@@ -366,6 +496,10 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		SELECT add_compression_policy('telemetry_raw', INTERVAL '14 days', if_not_exists => TRUE)
 	`)
 
+	if err := ensureCanonicalTimescale(ctx, pool); err != nil {
+		fmt.Printf("⚠️  canonical rollups skipped: %v\n", err)
+	}
+
 	// Performance indexes
 	indexes := []string{
 		// telemetry_raw
@@ -394,6 +528,10 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// ai
 		`CREATE INDEX IF NOT EXISTS idx_aiconv_user ON ai_conversations (user_id, updated_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_aimsg_conv  ON ai_messages (conversation_id, created_at ASC)`,
+		// canonical model — series lookup drives every compiled query
+		`CREATE INDEX IF NOT EXISTS idx_series_factory_field ON series (factory_id, field_key)`,
+		`CREATE INDEX IF NOT EXISTS idx_series_machine       ON series (machine_id, field_key)`,
+		`CREATE INDEX IF NOT EXISTS idx_series_labels        ON series USING GIN (labels)`,
 		// user_organizations
 		`CREATE INDEX IF NOT EXISTS idx_uo_user ON user_organizations (user_id)`,
 		// audit
@@ -407,6 +545,146 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	}
 
 	fmt.Println("✅ Schema ready")
+	return nil
+}
+
+// ensureCanonicalTimescale turns `readings` into a hypertable and builds the
+// rollup ladder + row-level security on the canonical tables. Everything here
+// needs TimescaleDB, so the caller treats a failure as non-fatal — the compiler
+// falls back to reading `readings` directly when a rollup is missing.
+//
+// The ladder is 1h and 1d only. There is deliberately NO 1-minute rollup:
+// readings arrive about once a minute already, so a 1m aggregate would have as
+// many rows as the raw table and buy nothing. Narrow windows read raw.
+//
+// avg is NOT stored. sum_v + n are, so a hierarchical rollup can compute an
+// exact weighted average (sum(sum_v)/sum(n)); an avg of hourly avgs would be
+// wrong whenever buckets hold different numbers of readings.
+func ensureCanonicalTimescale(ctx context.Context, pool *pgxpool.Pool) error {
+	if _, err := pool.Exec(ctx, `
+		SELECT create_hypertable(
+			'readings'::regclass,
+			by_range('ts', INTERVAL '7 days'),
+			if_not_exists => TRUE
+		)
+	`); err != nil {
+		return fmt.Errorf("hypertable: %w", err)
+	}
+
+	// Hourly rollup straight from raw readings. first_v/last_v are what make a
+	// cumulative counter exact: the delta for a bucket is last_v - first_v, which
+	// (unlike MAX-MIN) does not lose the piece that straddles a bucket edge and
+	// makes a counter reset detectable as last_v < first_v.
+	statements := []string{
+		`CREATE MATERIALIZED VIEW IF NOT EXISTS readings_1h
+		 WITH (timescaledb.continuous) AS
+		 SELECT series_id,
+		        time_bucket(INTERVAL '1 hour', ts) AS bucket,
+		        sum(value)          AS sum_v,
+		        count(*)            AS n,
+		        min(value)          AS min_v,
+		        max(value)          AS max_v,
+		        first(value, ts)    AS first_v,
+		        last(value, ts)     AS last_v
+		 FROM readings
+		 WHERE quality = 0
+		 GROUP BY series_id, 2
+		 WITH NO DATA`,
+		// Daily rollup on top of the hourly one (hierarchical continuous
+		// aggregate) — a year of questions reads ~10^5 rows instead of 32M.
+		`CREATE MATERIALIZED VIEW IF NOT EXISTS readings_1d
+		 WITH (timescaledb.continuous) AS
+		 SELECT series_id,
+		        time_bucket(INTERVAL '1 day', bucket) AS bucket,
+		        sum(sum_v)              AS sum_v,
+		        sum(n)                  AS n,
+		        min(min_v)              AS min_v,
+		        max(max_v)              AS max_v,
+		        first(first_v, bucket)  AS first_v,
+		        last(last_v, bucket)    AS last_v
+		 FROM readings_1h
+		 GROUP BY series_id, 2
+		 WITH NO DATA`,
+		// end_offset keeps the refresh off the newest rows so late arrivals are
+		// still picked up; real-time aggregation covers the uncovered tail.
+		// Real-time aggregation: the rollup is UNION'd with the raw rows newer than
+		// the last refresh. Without this a question about the last hour reads an
+		// empty bucket and answers zero, which looks like a stopped machine.
+		`ALTER MATERIALIZED VIEW readings_1h SET (timescaledb.materialized_only = false)`,
+		`ALTER MATERIALIZED VIEW readings_1d SET (timescaledb.materialized_only = false)`,
+		`SELECT add_continuous_aggregate_policy('readings_1h',
+			start_offset      => INTERVAL '7 days',
+			end_offset        => INTERVAL '30 minutes',
+			schedule_interval => INTERVAL '30 minutes',
+			if_not_exists     => TRUE)`,
+		`SELECT add_continuous_aggregate_policy('readings_1d',
+			start_offset      => INTERVAL '30 days',
+			end_offset        => INTERVAL '2 hours',
+			schedule_interval => INTERVAL '1 hour',
+			if_not_exists     => TRUE)`,
+		`ALTER TABLE readings SET (
+			timescaledb.compress,
+			timescaledb.compress_segmentby = 'series_id',
+			timescaledb.compress_orderby   = 'ts DESC'
+		)`,
+		`SELECT add_compression_policy('readings', INTERVAL '14 days', if_not_exists => TRUE)`,
+	}
+	for _, stmt := range statements {
+		if _, err := pool.Exec(ctx, stmt); err != nil {
+			fmt.Printf("⚠️  canonical rollup statement skipped: %v\n", err)
+		}
+	}
+
+	// Row-level security on the canonical tables only (the existing tables keep
+	// their app-level org filters). FORCE is required: the app connects as the
+	// table owner, and an owner bypasses a plain ENABLE.
+	//
+	// The policy reads `app.factory`, which every caller must set — an unset GUC
+	// yields NULL and therefore zero rows, deliberately failing closed. Ask-Data
+	// sets it in runScoped; the normalizer sets it per source table.
+	//
+	// ponytail: RLS is on `series` only, NOT on `readings`. TimescaleDB refuses
+	// both a continuous aggregate ("cannot create continuous aggregate on
+	// hypertable with row security") and columnstore ("columnstore cannot be used
+	// on table with row security") on an RLS table, so `readings` can have the
+	// rollup ladder or a row policy, not both — and losing the ladder would mean
+	// reading 32M rows per question. What holds the boundary instead: a reading is
+	// meaningless without its series, so every path joins `series` (v_readings,
+	// every compiled query) and inherits the filter, and `readings` itself is in
+	// deniedTables so no generated SQL can name it. Upgrade path if that is not
+	// enough: give the app its own non-owner role and REVOKE SELECT on readings,
+	// leaving only the views reachable.
+	rls := []string{
+		`ALTER TABLE series ENABLE ROW LEVEL SECURITY`,
+		`ALTER TABLE series FORCE  ROW LEVEL SECURITY`,
+		`DROP POLICY IF EXISTS series_by_factory ON series`,
+		`CREATE POLICY series_by_factory ON series USING
+			(factory_id::text = current_setting('app.factory', true))`,
+		// A build before the constraint above was known left an inert policy here
+		// (created fine, but ENABLE ROW LEVEL SECURITY had failed). Remove it so
+		// `\d readings` does not suggest a protection that is not in force.
+		`DROP POLICY IF EXISTS readings_by_series ON readings`,
+	}
+	for _, stmt := range rls {
+		if _, err := pool.Exec(ctx, stmt); err != nil {
+			fmt.Printf("⚠️  canonical RLS statement skipped: %v\n", err)
+		}
+	}
+
+	// A superuser (or BYPASSRLS) role ignores every policy, FORCE included — the
+	// docker-compose default POSTGRES_USER is exactly that, so the isolation above
+	// would be decorative and nobody would notice. Say so at startup.
+	var role string
+	var privileged bool
+	if err := pool.QueryRow(ctx, `
+		SELECT rolname, rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user
+	`).Scan(&role, &privileged); err == nil && privileged {
+		fmt.Printf("⚠️  %s is SUPERUSER/BYPASSRLS — factory row-level security is NOT enforced.\n"+
+			"    Queries are still scoped by the compiler; to make the database enforce it too:\n"+
+			"    ALTER ROLE %s NOSUPERUSER NOBYPASSRLS;\n", role, role)
+	}
+
+	fmt.Println("✅ Canonical rollups + RLS ready")
 	return nil
 }
 

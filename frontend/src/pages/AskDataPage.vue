@@ -1,10 +1,92 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, reactive, nextTick } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/services/api.service';
-import type { AskDataResult, AskBoardSummary, AskBoard, AskBoardChart } from '@/types';
+import { NJ5_FACTORY_ID } from '@/router';
+import type { AskDataResult, AskBoardSummary, AskBoard, AskBoardChart, AskScope } from '@/types';
 import { Sparkles, Loader2, Save, Trash2, RefreshCw, User, Plus, Pencil, ZoomOut } from 'lucide-vue-next';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
+
+// Which data this page asks against. 'canonical' + a factoryId is one real plant
+// (registry-driven, server-compiled queries); 'telemetry' is the demo org data.
+// A route may preset a scope; the picker below lists whatever the backend offers,
+// so standing up another plant needs no change here.
+const props = defineProps<{ dataset?: string; factoryId?: string }>();
+
+const route = useRoute();
+const router = useRouter();
+
+// A factory can also be addressed as /ask?factory=<id>, which is what the picker
+// navigates to for any plant without its own sidebar entry.
+const queryFactory = typeof route.query.factory === 'string' ? route.query.factory : '';
+
+const scopes = ref<AskScope[]>([]);
+const scope = ref<AskScope>({
+  dataset: props.dataset ?? (queryFactory ? 'canonical' : 'telemetry'),
+  factoryId: props.factoryId ?? queryFactory,
+  label: props.dataset === 'canonical' || queryFactory ? 'Factory' : 'Demo telemetry',
+});
+
+const heading = computed(() =>
+  scope.value.dataset === 'canonical' ? `Ask ${scope.value.label}` : 'Ask your data',
+);
+const askPlaceholder = computed(() =>
+  scope.value.dataset === 'canonical'
+    ? 'e.g. IQF2 ผลิตได้เท่าไหร่ 7 วันย้อนหลัง / อุณหภูมิ IQF2 vs ยอดผลิตเดือนที่แล้ว'
+    : 'e.g. average speed per machine over the last 24 hours, hourly',
+);
+
+// The scope list also resolves a preset route (/nj5) to its real label; a preset
+// factory that no longer has registered sources falls back to the first scope so the
+// page is never stuck pointing at nothing.
+async function loadScopes() {
+  try {
+    scopes.value = await api.askScopes();
+  } catch {
+    return; // keep the preset scope — the picker just stays hidden
+  }
+  const match = scopes.value.find(
+    (s) => s.dataset === scope.value.dataset && s.factoryId === scope.value.factoryId,
+  );
+  if (match) scope.value = match;
+  // Falling back goes through switchScope so the URL follows too — /nj5 must not stay
+  // in the address bar while the page is showing something else.
+  else if (scopes.value.length > 0) switchScope(scopes.value[0]);
+}
+
+// Switching plants invalidates everything on screen: different machines, different
+// metrics, and a spec compiled for another factory.
+//
+// It also changes the URL, because the scope IS the page: leaving /nj5 in the address
+// bar while showing demo data highlights the wrong sidebar entry and bookmarks a lie.
+function switchScope(next: AskScope) {
+  scope.value = next;
+  result.value = null;
+  notes.value = [];
+  prev.value = null;
+  zoomStack.value = [];
+  askError.value = '';
+
+  const target =
+    next.dataset !== 'canonical'
+      ? { path: '/ask' }
+      : next.factoryId === NJ5_FACTORY_ID
+        ? { path: '/nj5' }
+        : { path: '/ask', query: { factory: next.factoryId } };
+  // Compare against the live route, not the mount-time query: switching A → B → A
+  // must still put A back in the address bar.
+  if (target.path !== route.path || (target.query?.factory ?? '') !== (route.query.factory ?? '')) {
+    router.replace(target); // replace, not push: toggling scope is not navigation history
+  }
+}
+
+// What to send to /ai/run-sql to reproduce a chart: a canonical chart is defined by
+// its spec (recompiled server-side, so it also picks a finer rollup when zoomed),
+// a legacy chart by its stored SQL text.
+function replayOf(x: { sql: string; spec?: string; factoryId?: string }) {
+  return x.spec ? { spec: x.spec, factoryId: x.factoryId || scope.value.factoryId } : { sql: x.sql };
+}
 
 // Answers arrive as markdown (tables, headers, bold). Sanitize before v-html —
 // this is LLM output crossing into the DOM.
@@ -25,7 +107,36 @@ const askedQuestion = ref('');
 // Previous turn, so a follow-up ("make it a bar chart") refines it instead of being rejected.
 // clarification set instead of sql when the previous turn asked back (B3) — the next
 // message is the user's reply to that question.
-const prev = ref<{ question: string; sql: string; clarification?: string; windowHours?: number } | null>(null);
+const prev = ref<{ question: string; sql: string; spec?: string; clarification?: string; windowHours?: number } | null>(null);
+
+// A bucket with no readings is a MISSING row, not a zero — so ECharts draws one
+// straight segment across it and it reads as steady running. Insert a null point in
+// each hole (upstream sent nothing for ~3 hours on 2026-07-15) so the line breaks
+// there instead of inventing a trend. The step is taken from the data itself rather
+// than the bucket string, so it works on every path.
+// ponytail: one null per hole is enough to break a line — no need to fill the whole
+// hole; cap keeps a pathological gap from generating thousands of points.
+function padTimeGaps(cols: string[], rows: unknown[][], xCol: unknown): unknown[][] {
+  const xi = typeof xCol === 'string' ? cols.indexOf(xCol) : 0;
+  if (xi < 0 || rows.length < 4) return rows;
+  const times = rows.map((r) => Date.parse(String(r[xi])));
+  if (times.some((t) => !Number.isFinite(t))) return rows;
+
+  const deltas = times.slice(1).map((t, i) => t - times[i]).filter((d) => d > 0).sort((a, b) => a - b);
+  if (deltas.length === 0) return rows;
+  const step = deltas[Math.floor(deltas.length / 2)]; // median: robust to the holes themselves
+  const out: unknown[][] = [];
+  let added = 0;
+  rows.forEach((r, i) => {
+    out.push(r);
+    if (i + 1 < rows.length && times[i + 1] - times[i] > step * 1.75 && added < 500) {
+      const hole = cols.map((_, c) => (c === xi ? new Date(times[i] + step).toISOString() : null));
+      out.push(hole);
+      added++;
+    }
+  });
+  return out;
+}
 
 // Merge the LLM's ECharts option (no data) with the result rows as an ECharts
 // dataset. Re-running the SQL just swaps the source — the encoding stays put.
@@ -35,23 +146,80 @@ const prev = ref<{ question: string; sql: string; clarification?: string; window
 function withDataset(option: Record<string, unknown>, columns: string[], rows: unknown[][]) {
   // rows can be null (backend serializes an empty result set as null) — coerce so the
   // array spread never throws "not iterable".
-  const safeRows = Array.isArray(rows) ? rows : [];
   const safeCols = Array.isArray(columns) ? columns : [];
+  const seriesRaw = option?.series;
+  const seriesArr = Array.isArray(seriesRaw) ? seriesRaw : seriesRaw ? [seriesRaw] : [];
+  const firstEncode = ((seriesArr[0] as Record<string, unknown>)?.encode ?? {}) as Record<string, unknown>;
+  const safeRows = padTimeGaps(safeCols, Array.isArray(rows) ? rows : [], firstEncode.x);
   // Long series get a zoom slider + wheel/drag zoom. Client-side only: it re-frames
   // the rows already loaded, it does not fetch finer buckets.
   // ponytail: 60-row threshold, no refetch-on-zoom — add drill-down when a day/point
   // is genuinely too coarse for what people zoom into.
   const zoom = safeRows.length > 60;
-  // grid.top clears the chart title; the LLM's own grid (if any) wins on the rest.
+  // Layout is ours, content is the model's: it writes the title text and the legend
+  // labels, we decide where they sit. Left to itself the model puts both on row 0,
+  // so a title like "IQF2: Evap Temp vs ยอดผลิต 14-19 ก.ค. (ค่าเฉลี่ยทุก 6 ชม.)"
+  // runs straight under the legend. One row each, then the plot below both.
   const merged = {
     ...(option ?? {}),
-    grid: { containLabel: true, ...(option?.grid as object), top: 56, ...(zoom ? { bottom: 64 } : {}) },
+    title: { ...(option?.title as object), top: 4, left: 8 },
+    legend: { ...(option?.legend as object), top: 32, left: 'center', orient: 'horizontal' },
+    grid: { containLabel: true, ...(option?.grid as object), top: 78, ...(zoom ? { bottom: 64 } : {}) },
     ...(zoom ? { dataZoom: [{ type: 'inside' }, { type: 'slider', bottom: 8, height: 18 }] } : {}),
     dataset: { source: [safeCols, ...safeRows] },
   };
 
-  const seriesRaw = option?.series;
-  const seriesArr = Array.isArray(seriesRaw) ? seriesRaw : seriesRaw ? [seriesRaw] : [];
+  // Min–max envelope: the backend ships <field>_min/<field>_max beside a gauge mean
+  // (compiler.go), because the mean of an hour that ran at −35 and defrosted to +25
+  // is +1.6 — a value the machine was never at. Shade min..max behind the line and
+  // both states are visible without zooming to the raw tier.
+  const banded = seriesArr.flatMap((raw) => {
+    const s = raw as Record<string, unknown>;
+    const y = (s.encode as Record<string, unknown> | undefined)?.y;
+    if (s.type !== 'line' || typeof y !== 'string') return [s];
+    const lo = `${y}_min`, hi = `${y}_max`;
+    if (!safeCols.includes(lo) || !safeCols.includes(hi)) return [s];
+    // stackStrategy 'all' is load-bearing: by default ECharts stacks same-sign values
+    // only, so with a min of −36 the span would stack from zero and the band floated
+    // above the axis instead of hugging the line (and stretched the axis to +80).
+    const base = { type: 'line', yAxisIndex: s.yAxisIndex ?? 0, symbol: 'none', silent: true,
+      stack: `band_${y}`, stackStrategy: 'all', lineStyle: { width: 0 }, tooltip: { show: false }, z: 1 };
+    return [
+      // Two stacked series are how ECharts fills between curves: an invisible one up
+      // to min, then the span on top of it carrying the area.
+      { ...base, name: `${y} band`, encode: { x: (s.encode as Record<string, unknown>).x, y: lo } },
+      { ...base, name: `${y} span`, encode: { x: (s.encode as Record<string, unknown>).x, y: `__span_${y}` },
+        areaStyle: { opacity: 0.16 } },
+      { ...s, z: 3 },
+    ];
+  });
+  if (banded.length !== seriesArr.length) {
+    // The span dimension has to be computed — ECharts can stack, not subtract.
+    const spans = safeCols.flatMap((c) => (c.endsWith('_max') && safeCols.includes(c.replace(/_max$/, '_min'))
+      ? [c.replace(/_max$/, '')] : []));
+    const cols = [...safeCols, ...spans.map((f) => `__span_${f}`)];
+    const rows = safeRows.map((r) => [...r, ...spans.map((f) => {
+      const lo = Number(r[safeCols.indexOf(`${f}_min`)]), hi = Number(r[safeCols.indexOf(`${f}_max`)]);
+      return Number.isFinite(lo) && Number.isFinite(hi) ? hi - lo : null;
+    })]);
+    // ECharts names an unnamed series after its encoded dimension, so the band
+    // helpers would show up in the legend as "evap_temp_min"/"__span_…". List only
+    // the model's own series.
+    const names = seriesArr
+      .map((raw) => {
+        const s = raw as Record<string, unknown>;
+        const y = (s.encode as Record<string, unknown> | undefined)?.y;
+        return typeof s.name === 'string' ? s.name : typeof y === 'string' ? y : '';
+      })
+      .filter(Boolean);
+    return {
+      ...merged,
+      legend: { ...(merged.legend as object), ...(names.length ? { data: names } : {}) },
+      dataset: { source: [cols, ...rows] },
+      series: banded,
+    };
+  }
+
   if (seriesArr.length !== 1) return merged;
   const s = seriesArr[0] as Record<string, unknown>;
 
@@ -92,10 +260,11 @@ function withDataset(option: Record<string, unknown>, columns: string[], rows: u
   // ponytail: 20-category ceiling — beyond that the single-series fallback stands.
   if (vals.length < 2 || vals.length > 20) return merged;
 
-  // Per-machine legend is a vertical list at the top right; grid reserves room for it.
+  // Per-machine legend is a vertical list down the right side; grid reserves room for
+  // it. It still starts below the title row so a long title cannot run into it.
   return {
     ...merged,
-    legend: { ...(option.legend as object), left: undefined, top: 8, right: 8, orient: 'vertical' },
+    legend: { ...(option.legend as object), left: undefined, top: 32, right: 8, orient: 'vertical' },
     grid: { ...merged.grid, right: 220 },
     dataset: [
       { source: [safeCols, ...safeRows] },
@@ -141,7 +310,7 @@ function xIndex(r: AskDataResult) {
 
 function onZoom(e: ZoomEvent) {
   const r = result.value;
-  if (!r?.sql?.includes('$1') || drilling.value) return;
+  if (drilling.value || !(r?.spec || r?.sql?.includes('$1'))) return;
   const rows = r.rows ?? [];
   const xi = xIndex(r);
   if (xi < 0 || rows.length < 4) return;
@@ -169,7 +338,7 @@ async function fetchRange(range: { from?: string; to?: string; windowHours?: num
   if (!r) return;
   drilling.value = true;
   try {
-    const d = await api.runSql(r.sql, range);
+    const d = await api.runSql(replayOf(r), range);
     result.value = { ...r, columns: d.columns, rows: d.rows, from: d.from, to: d.to };
   } catch (e) {
     askError.value = (e as Error).message;
@@ -204,7 +373,7 @@ async function ask() {
   asking.value = true;
   askError.value = '';
   try {
-    const res = await api.askData(q, prev.value ?? undefined);
+    const res = await api.askData(q, prev.value ?? undefined, scope.value.dataset, scope.value.factoryId);
     // A data turn replaces the chart and resets the thread; prose/clarification
     // turns annotate the current chart instead of clearing it. Only a data turn
     // advances the SQL context.
@@ -212,7 +381,7 @@ async function ask() {
       result.value = res;
       askedQuestion.value = q;
       notes.value = [];
-      prev.value = { question: q, sql: res.sql, windowHours: res.windowHours };
+      prev.value = { question: q, sql: res.sql, spec: res.spec, windowHours: res.windowHours };
       zoomStack.value = [{ windowHours: res.windowHours }];
     } else if (res.clarification) {
       notes.value.push({ q, text: res.clarification, kind: 'clarification' });
@@ -272,7 +441,7 @@ async function runChart(ch: AskBoardChart) {
   try {
     // Saved charts store their window, so reopening a board shows live data over the
     // span the chart was created with, not a default 24h.
-    chartData[ch.id] = await api.runSql(ch.sql, { windowHours: ch.windowHours });
+    chartData[ch.id] = await api.runSql(replayOf(ch), { windowHours: ch.windowHours });
   } catch {
     chartData[ch.id] = 'error';
   }
@@ -303,6 +472,8 @@ async function saveToBoard() {
     await api.addBoardChart(boardId, {
       question: askedQuestion.value,
       sql: result.value.sql,
+      spec: result.value.spec,
+      factoryId: result.value.spec ? scope.value.factoryId : undefined,
       echartOption: result.value.echartOption,
       windowHours: result.value.windowHours,
     });
@@ -361,7 +532,10 @@ async function removeBoard(id: string) {
   await loadBoards();
 }
 
-onMounted(loadBoards);
+onMounted(() => {
+  void loadBoards();
+  void loadScopes();
+});
 </script>
 
 <template>
@@ -372,9 +546,26 @@ onMounted(loadBoards);
       <div class="mx-auto max-w-7xl">
         <div class="flex items-center gap-3 text-white">
           <Sparkles class="h-7 w-7 text-primary-400" />
-          <h1 class="text-2xl font-bold lg:text-3xl">Ask your data</h1>
+          <h1 class="text-2xl font-bold lg:text-3xl">{{ heading }}</h1>
         </div>
         <p class="mt-2 text-base text-gray-500">Ask in plain language — a chart is generated to answer you.</p>
+
+        <!-- Scope picker: one plant per question, so the generated prompt stays the
+             same size however many plants exist. Hidden until there is a choice. -->
+        <div v-if="scopes.length > 1" class="mt-4 flex flex-wrap items-center gap-2">
+          <span class="text-xs uppercase tracking-wide text-gray-500">Data</span>
+          <button
+            v-for="s in scopes" :key="s.dataset + s.factoryId"
+            class="rounded-full border px-3 py-1.5 text-sm transition-colors"
+            :class="scope.dataset === s.dataset && scope.factoryId === s.factoryId
+              ? 'border-primary-500/60 bg-surface-200 text-white'
+              : 'border-white/10 text-gray-400 hover:bg-surface-200/60 hover:text-gray-200'"
+            :disabled="asking"
+            @click="switchScope(s)"
+          >
+            {{ s.label }}
+          </button>
+        </div>
 
         <!-- Boards as chips: [+ New] [board ³] [board ⁵] — replaces the old second sidebar -->
         <div class="mt-5 flex flex-wrap items-center gap-2">
@@ -404,7 +595,7 @@ onMounted(loadBoards);
           <textarea
             v-model="question"
             rows="3"
-            placeholder="e.g. average speed per machine over the last 24 hours, hourly"
+            :placeholder="askPlaceholder"
             class="flex-1 resize-none rounded-xl border border-white/10 bg-surface-100 px-5 py-4 text-base text-gray-200 outline-none focus:border-primary-500"
             @keydown.enter.exact.prevent="ask"
           />

@@ -1,5 +1,5 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
-import type { ApiResponse, Dashboard, DashboardWidget, Machine, MachineField, Alert, AlertEvent, AiConversation, AiMessage, AiChatIntent, AiTool, TelemetrySeries, TelemetrySnapshot, OrgOption, AskDataResult, AskBoardSummary, AskBoard } from '@/types';
+import type { ApiResponse, Dashboard, DashboardWidget, Machine, MachineField, Alert, AlertEvent, AiConversation, AiMessage, AiChatIntent, AiTool, TelemetrySeries, TelemetrySnapshot, OrgOption, AskDataResult, AskBoardSummary, AskBoard, AskScope } from '@/types';
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
 
@@ -312,22 +312,41 @@ class ApiService {
   }
 
   // ─── Ask Data (NL → SQL → ECharts) ──────────────────────────────────────────
-  async askData(question: string, context?: { question: string; sql: string; clarification?: string; windowHours?: number }) {
+  // Which datasets this user can ask against: the demo telemetry org plus one entry
+  // per factory with registered sources, so a new plant appears without a UI change.
+  async askScopes() {
+    const { data } = await this.client.get<ApiResponse<AskScope[]>>('/ai/scopes');
+    return data.data;
+  }
+
+  async askData(
+    question: string,
+    context?: { question: string; sql: string; spec?: string; clarification?: string; windowHours?: number },
+    dataset?: string,
+    factoryId?: string,
+  ) {
     // Up to three sequential LLM round-trips (SQL → prose/chart → judge) → far
     // more than the default 15s. Outermost rung of the timeout ladder: it must
     // stay at/above nginx's proxy_read_timeout (210s) and above the backend's own
     // askHandlerTimeout (200s, nl2sql.go) so the backend is what gives up first —
     // its 502 carries a real error.message, a proxy cut carries only HTML.
     // context = previous turn, so a follow-up ("make it a bar chart") refines it.
-    const { data } = await this.client.post<ApiResponse<AskDataResult>>('/ai/ask', { question, context }, { timeout: 210_000 });
+    const { data } = await this.client.post<ApiResponse<AskDataResult>>(
+      '/ai/ask', { question, context, dataset, factoryId }, { timeout: 210_000 },
+    );
     return data.data;
   }
 
-  // Doubles as the zoom endpoint: from/to re-runs the same SQL over a narrower
+  // Doubles as the zoom endpoint: from/to re-runs the same query over a narrower
   // range (and a finer bucket). Without them the window is windowHours back from now.
-  async runSql(sql: string, range?: { from?: string; to?: string; windowHours?: number }) {
+  // Pass spec+factoryId for a canonical chart — the server recompiles it, which is
+  // what lets a zoom drop to a finer rollup tier; sql is the legacy replay path.
+  async runSql(
+    query: { sql?: string; spec?: string; factoryId?: string },
+    range?: { from?: string; to?: string; windowHours?: number },
+  ) {
     const { data } = await this.client.post<ApiResponse<{ columns: string[]; rows: unknown[][]; from: string; to: string }>>(
-      '/ai/run-sql', { sql, ...range },
+      '/ai/run-sql', { ...query, ...range },
     );
     return data.data;
   }
@@ -356,7 +375,7 @@ class ApiService {
     await this.client.delete(`/ai/boards/${id}`);
   }
 
-  async addBoardChart(boardId: string, payload: { question: string; sql: string; echartOption: Record<string, unknown>; windowHours?: number }) {
+  async addBoardChart(boardId: string, payload: { question: string; sql: string; spec?: string; factoryId?: string; echartOption: Record<string, unknown>; windowHours?: number }) {
     const { data } = await this.client.post<ApiResponse<{ id: string }>>(`/ai/boards/${boardId}/charts`, payload);
     return data.data;
   }

@@ -26,6 +26,7 @@ func RegisterRoutes(router fiber.Router) {
 	router.Post("/chat", ctrl.Chat)
 
 	// Ask-Data: NL → hardened SQL → ECharts, plus saved boards (nl2sql.go, boards.go)
+	router.Get("/scopes", ListScopes)
 	router.Post("/ask", AskData)
 	router.Post("/run-sql", RunSQL)
 	router.Get("/boards", ListBoards)

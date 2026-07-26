@@ -8,6 +8,7 @@ import (
 	"iot-dashboard/internal/database"
 	"iot-dashboard/internal/middleware"
 	"iot-dashboard/internal/migrate"
+	"iot-dashboard/internal/modules/admin"
 	"iot-dashboard/internal/modules/ai"
 	"iot-dashboard/internal/modules/alerts"
 	"iot-dashboard/internal/modules/auth"
@@ -15,6 +16,7 @@ import (
 	"iot-dashboard/internal/modules/led"
 	"iot-dashboard/internal/modules/machines"
 	"iot-dashboard/internal/modules/telemetry"
+	"iot-dashboard/internal/normalizer"
 	ws "iot-dashboard/internal/websocket"
 	"os"
 	"os/signal"
@@ -86,6 +88,11 @@ func main() {
 	dbBroadcaster := broadcaster.New(gateway, 30*time.Second, alertEval)
 	dbBroadcaster.Start()
 
+	// ── Normalizer — landing tables → canonical series/readings, driven by the
+	// source registry. Idle when no source_tables rows are registered.
+	norm := normalizer.New(30 * time.Second)
+	norm.Start()
+
 	// ── Fiber App ─────────────────────────────────────────────────────────────
 	app := fiber.New(fiber.Config{
 		ErrorHandler: middleware.ErrorHandler,
@@ -133,6 +140,7 @@ func main() {
 
 	// ── Routes ────────────────────────────────────────────────────────────────
 	api := app.Group("/api")
+	admin.RegisterRoutes(api.Group("/admin"))
 	auth.RegisterRoutes(api.Group("/auth"))
 	machines.RegisterRoutes(api.Group("/machines"))
 	telemetry.RegisterRoutes(api.Group("/telemetry"), dbBroadcaster, alertEval)
@@ -178,6 +186,7 @@ func main() {
 
 	fmt.Println("\nShutting down gracefully…")
 	dbBroadcaster.Stop()
+	norm.Stop()
 	_ = app.ShutdownWithTimeout(10 * time.Second)
 	fmt.Println("👋 Shutdown complete")
 }

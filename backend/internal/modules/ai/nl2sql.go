@@ -25,8 +25,28 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// allowedViews are the only relations a generated query may read.
-var allowedViews = []string{"v_telemetry", "v_machines", "v_machine_fields"}
+// allowedViews are the only relations a generated query may read. The v_nj5* views
+// belong to the "nj5" dataset (see schemaFor); they're a shared allowlist here — the
+// per-question schema context is what steers the model to its dataset's views.
+// ponytail: shared union, not a per-dataset allowlist — least-privilege per dataset is
+// the upgrade path if a dataset ever holds data the others' pages shouldn't reach.
+// Longest names first: the validator scrubs these out of the query before
+// scanning for denied tables, and "readings_1h" contains "readings".
+//
+// Two datasets, six relations, and this list does NOT grow when a plant, machine,
+// metric or upstream table is added — a new source is a registry row. If you are
+// about to append a per-plant view here, that is the signal you are on the old path.
+// The rollups (readings_1h/_1d) are deliberately NOT here. A continuous aggregate is
+// materialized separately, so row-level security on `readings` does not filter it —
+// reading one directly would cross factories. Compiled queries reach them safely
+// because they always join v_series (which IS filtered) and because the compiler's
+// SQL is server-authored and never passes through this validator at all.
+var allowedViews = []string{
+	// demo/telemetry dataset (mock data, kept for demos)
+	"v_telemetry", "v_machines", "v_machine_fields",
+	// canonical dataset (real plants) — both enforce RLS through series
+	"v_readings", "v_series",
+}
 
 // sqlForbidden fast-fails on write/DDL keywords. The read-only tx is the true guard;
 // this is defense-in-depth + a clearer error than a Postgres failure.
@@ -36,7 +56,10 @@ var sqlForbidden = regexp.MustCompile(`(?i)\b(insert|update|delete|drop|alter|cr
 // deniedTables blocks any reference to a real base table (or system catalog) — the
 // only way to read cross-org data. Allowed v_ views are scrubbed out before scanning
 // so "v_machines" doesn't trip the "machines" rule.
-var deniedTables = regexp.MustCompile(`(?i)\b(telemetry_raw|telemetry_aggregates|machines|machine_fields|users|organizations|factories|production_lines|dashboards|dashboard_widgets|alerts|alert_events|ai_boards|ai_board_charts|ai_messages|ai_conversations|ai_preview_drafts|user_organizations|audit_logs|information_schema|pg_[a-z_]+)\b`)
+// Landing tables (nj5_*, src_*) and the canonical base tables (series, readings)
+// are denied too: a generated query reaches them only through the allowed views,
+// which is what keeps row-level security and the quality filter in the path.
+var deniedTables = regexp.MustCompile(`(?i)\b(telemetry_raw|telemetry_aggregates|machines|machine_fields|nj5_machines|nj5_iqf2|nj5_iqf3|v_nj5[a-z0-9_]*|src_[a-z0-9_]+|series|readings|readings_1[hd]|source_tables|source_metrics|source_state|users|organizations|factories|production_lines|dashboards|dashboard_widgets|alerts|alert_events|ai_boards|ai_board_charts|ai_messages|ai_conversations|ai_preview_drafts|user_organizations|audit_logs|information_schema|pg_[a-z_]+)\b`)
 
 // validateSQL enforces: single SELECT, no write keywords, no base-table access.
 // Returns the trimmed, semicolon-free query on success.
@@ -170,6 +193,14 @@ func needsBucketing(sqlLower, runText string, rowCount int) bool {
 const maxRows = 5000
 
 func runScoped(ctx context.Context, orgID, sqlText string, args ...any) (cols []string, rows [][]any, err error) {
+	return runScopedIn(ctx, orgID, "", sqlText, args...)
+}
+
+// runScopedIn additionally scopes the canonical tables to one factory. series and
+// readings are FORCE row-level-security on app.factory, so a query reaching them
+// without a factory returns nothing rather than everything — an unset scope fails
+// closed. The telemetry dataset passes "" because its own views filter by org.
+func runScopedIn(ctx context.Context, orgID, factoryID, sqlText string, args ...any) (cols []string, rows [][]any, err error) {
 	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 
@@ -190,6 +221,9 @@ func runScoped(ctx context.Context, orgID, sqlText string, args ...any) (cols []
 	}
 	// is_local=true → scoped to this tx, cleared on rollback.
 	if _, err = tx.Exec(ctx, "SELECT set_config('app.current_org', $1, true)", orgID); err != nil {
+		return nil, nil, err
+	}
+	if _, err = tx.Exec(ctx, "SELECT set_config('app.factory', $1, true)", factoryID); err != nil {
 		return nil, nil, err
 	}
 
@@ -229,7 +263,9 @@ var emitSQLTool = map[string]any{
 		"properties": map[string]any{
 			"answerable":    map[string]any{"type": "boolean", "description": "false ONLY for a greeting, chit-chat, clearly non-factory input, or a question about a previous chart/result itself (how it was computed, its interval) — then leave sql empty. A data-listing question ('which SKUs', 'what machines', 'list values') is answerable=true."},
 			"sql":           map[string]any{"type": "string", "description": "One SELECT over the allowed v_ views. No semicolons, no CTEs, no writes. Always include a LIMIT."},
-			"window_hours":  map[string]any{"type": "number", "description": "The lookback the SQL's $1/$2 window should span, in hours: last 24h → 24, last 7 days → 168, last month → 720, last year → 8760. Omit (or 0) when the query has no time filter or the question names no range — the server then uses 24."},
+			"window_hours":  map[string]any{"type": "number", "description": "For a RELATIVE lookback: the span the SQL's $1/$2 window should cover, in hours ending now: last 24h → 24, last 7 days → 168, last month → 720, last year → 8760. Omit (or 0) when the query has no time filter, names no range, or when you set from/to instead — the server then uses 24."},
+			"from":          map[string]any{"type": "string", "description": "For an ABSOLUTE calendar range (a named month/year like 'May 2026' or 'August 2025', or explicit dates) set the range START as an ISO date 'YYYY-MM-DD'. The SQL still uses $1/$2 — the server binds them to from/to. Set together with to, and leave window_hours out."},
+			"to":            map[string]any{"type": "string", "description": "The range END as an ISO date 'YYYY-MM-DD', EXCLUSIVE (the first day AFTER the range). For 'May 2026' use from=2026-05-01, to=2026-06-01. Set only together with from."},
 			"clarification": map[string]any{"type": "string", "description": "Set ONLY when the question IS about factory data but you cannot determine WHAT to query — no identifiable metric/machine/dimension. ONE short question in the user's language, offering concrete choices from the schema. Leave empty when a sensible default exists (no time range → assume last 24h). Never set together with sql."},
 		},
 	},
@@ -307,6 +343,45 @@ Rules:
 	return b.String()
 }
 
+// askScope is what a question is asked against: which dataset, and for the
+// canonical dataset which factory (one factory per question keeps the generated
+// prompt bounded no matter how many plants exist).
+type askScope struct {
+	Dataset   string // "" / "telemetry" (demo org views) | "canonical" (a real factory)
+	FactoryID string
+}
+
+func (s askScope) canonical() bool { return s.Dataset == "canonical" && s.FactoryID != "" }
+
+// schemaFor returns the schema-context prompt for a scope.
+//   - "" / "telemetry" — per-org context assembled from the DB (mock/demo data)
+//   - "canonical"      — generated from the source registry for one factory
+//
+// Adding a plant, machine, metric or upstream table changes rows, not this function.
+// The retired "nj5" dataset answers with an error rather than silently falling through
+// to the demo prompt, which would return confident answers about the wrong data.
+func schemaFor(ctx context.Context, sc askScope, orgID string) (string, error) {
+	switch {
+	case sc.canonical():
+		cat, err := loadCatalog(ctx, sc.FactoryID)
+		if err != nil {
+			return "", err
+		}
+		return cat.promptContext(), nil
+	case sc.Dataset == "nj5":
+		return "", errors.New(`the "nj5" dataset was replaced by dataset "canonical" with the Nongjok5 factoryId`)
+	default:
+		return buildSchemaContext(ctx, orgID), nil
+	}
+}
+
+// The NJ5 dataset used to live here as a ~30-line hand-written prompt over four
+// v_nj5* views, with every semantic rule ("count_fg is cumulative, use MAX-MIN",
+// "freezing_time 9999 is a sentinel", "rail_temp is always NULL") stated as prose the
+// model was trusted to follow. All of it is now data: see scripts/nj5-registry.sql for
+// the same facts as source_metrics rows, and compiler.go for the rules being enforced
+// rather than requested. scripts/nj5-retire.sql drops the views themselves.
+
 // prevTurn carries the immediately-previous Ask-Data turn so a follow-up ("make it a
 // bar chart", "group by day", "เอาเป็นกราฟแท่ง") can refine it instead of being rejected.
 // SQL and Clarification are mutually exclusive: a data turn sets SQL, a clarification
@@ -315,6 +390,10 @@ type prevTurn struct {
 	Question      string
 	SQL           string
 	Clarification string
+	// Spec is the canonical path's equivalent of SQL: the JSON query spec the
+	// previous turn compiled. Unlike SQL text it survives changes to the relations
+	// underneath, so a follow-up refines the intent rather than patching a string.
+	Spec string
 	// Window the previous SQL's $1/$2 were bound to, so re-running it for a prose
 	// follow-up ("what does this chart show") reads the same range the user saw.
 	WindowHours float64
@@ -332,6 +411,27 @@ type sqlEmission struct {
 	SQL           string
 	Clarification string
 	WindowHours   float64
+	// From/To are set when the question names an absolute calendar range ("May 2026",
+	// "August 2025", explicit dates) instead of a relative lookback. Both set → the
+	// server binds $1/$2 to them instead of windowFor(WindowHours). To is exclusive.
+	From *time.Time
+	To   *time.Time
+}
+
+// parseEmissionTime accepts an ISO date ("2026-05-01") or RFC3339 datetime from the
+// model and returns it as UTC. ponytail: dates land at UTC midnight, not the user's
+// +07 — immaterial for month-scale aggregates; revisit if we ever need day-exact edges.
+func parseEmissionTime(s string) (time.Time, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}, false
+	}
+	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", "2006-01-02"} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t.UTC(), true
+		}
+	}
+	return time.Time{}, false
 }
 
 // askCallTimeout bounds ONE generation call (emitSQL / emitProse / emitEChart).
@@ -363,7 +463,9 @@ const askHandlerTimeout = 200 * time.Second
 func emitSQL(ctx context.Context, question, schema string, prev *prevTurn, fixup *sqlFixup) (sqlEmission, error) {
 	ctx, cancel := context.WithTimeout(ctx, askCallTimeout)
 	defer cancel()
+	today := time.Now().Format("2006-01-02")
 	sp := "You translate a factory-analytics question into ONE read-only Postgres SELECT by calling emit_sql. Never reply in prose.\n\n" +
+		"Today is " + today + ". Resolve every named or relative date against it.\n\n" +
 		"Example — \"avg speed last 24h for CW-01\" (window_hours 24):\n" +
 		"SELECT time_bucket('%BUCKET%', ts) AS bucket, avg((data->>'speed')::float) AS avg_speed " +
 		"FROM v_telemetry WHERE machine_name ILIKE '%CW-01%' AND ts >= $1 AND ts < $2 " +
@@ -379,6 +481,13 @@ func emitSQL(ctx context.Context, question, schema string, prev *prevTurn, fixup
 		"When a reasonable default interpretation exists, answer with the default instead of asking: no time " +
 		"range → last 24h; a fuzzy condition like \"drops/low\" → below that metric's average over the window. " +
 		"Set clarification ONLY when no metric, machine, or dimension is identifiable at all.\n\n" +
+		"CALENDAR RANGE vs LOOKBACK — get this right or the window is wrong:\n" +
+		"- A named calendar range (explicit dates, or named months/quarters — \"March to April\", " +
+		"\"เดือนมีนาถึงเมษา\", \"Q1\", \"last month\", \"เดือนที่แล้ว\") → set from AND to as ISO 'YYYY-MM-DD' and OMIT " +
+		"window_hours. to is EXCLUSIVE, the first day AFTER the range (March–April → from=<year>-03-01, " +
+		"to=<year>-05-01). If the year is unstated, use the most recent occurrence already ended on or before today.\n" +
+		"- Use window_hours ONLY for a relative lookback ending now (\"last 7 days\", \"ย้อนหลัง 7 วัน\", \"recent\"). " +
+		"NEVER answer a named calendar range with window_hours — that measures back from today and misses the range.\n\n" +
 		"A time-series over a window MUST aggregate with time_bucket('%BUCKET%', ts) even when the user " +
 		"explicitly demands raw / per-reading / every-minute data (\"ข้อมูลจริง\", \"ทุก 1 นาที\", \"every row\") — " +
 		"NEVER return raw ungrouped rows for a window, or a long window is silently truncated to its first rows. " +
@@ -432,6 +541,8 @@ func parseSQLEmission(rawJSON string) (sqlEmission, error) {
 		SQL           string  `json:"sql"`
 		Clarification string  `json:"clarification"`
 		WindowHours   float64 `json:"window_hours"`
+		From          string  `json:"from"`
+		To            string  `json:"to"`
 	}
 	if err := json.Unmarshal([]byte(rawJSON), &a); err != nil {
 		return sqlEmission{}, err
@@ -442,7 +553,15 @@ func parseSQLEmission(rawJSON string) (sqlEmission, error) {
 	if !a.Answerable || strings.TrimSpace(a.SQL) == "" {
 		return sqlEmission{}, errNotDataQuestion
 	}
-	return sqlEmission{SQL: a.SQL, WindowHours: a.WindowHours}, nil
+	e := sqlEmission{SQL: a.SQL, WindowHours: a.WindowHours}
+	// An absolute range needs BOTH ends to parse and be ordered; otherwise ignore it
+	// and fall back to the relative window (windowFor).
+	if f, okF := parseEmissionTime(a.From); okF {
+		if t, okT := parseEmissionTime(a.To); okT && t.After(f) {
+			e.From, e.To = &f, &t
+		}
+	}
+	return e, nil
 }
 
 // emitProse answers a question that isn't a SQL query (an explanation or follow-up like
@@ -495,6 +614,7 @@ const echartSystemPrompt = `You turn a SQL result into an ECharts option that an
 - Pick the chart type — use ONLY 'line', 'bar', 'pie', 'scatter', or 'heatmap': a time-bucket column → line; a category comparison → bar; parts-of-a-whole → pie; two categorical dimensions plus one numeric value → heatmap.
 - A dataset with the result rows is injected AT RENDER TIME. Reference result columns BY NAME using encode (e.g. series:[{type:'line', encode:{x:'bucket', y:'avg_speed'}}]). Do NOT include any data arrays or a dataset field yourself.
 - Emit exactly ONE series even when the rows contain a category column (e.g. machine_name) — the renderer automatically splits one series into one line per category value. NEVER emit one series per machine/category: without per-series filters they would all draw identical data.
+- EXCEPTION — two DIFFERENT numeric columns (e.g. produced_count and evap_temp) are two different quantities, so emit one series each and give them separate axes: yAxis:[{},{}] with the second series set to yAxisIndex:1. Draw the counted quantity as 'bar' and the measured one as 'line'. Sharing one axis here makes the smaller quantity a flat line at the bottom.
 - Set xAxis.type: 'time' for a timestamp/bucket column, 'category' for names. Add a short title, tooltip{trigger:'axis'}, and a legend when there are multiple series.
 - Style variants stay on their base type (still ONE series): for an area chart set areaStyle:{} on a 'line' series; for a smoothed line set smooth:true; for a horizontal bar keep type:'bar' but set yAxis.type:'category' and xAxis.type:'value' (encode x=value, y=category).
 - For a 'heatmap' series use encode:{x:<category>, y:<category>, value:<numeric>}, set BOTH xAxis.type and yAxis.type to 'category', tooltip{trigger:'item'}, and add a visualMap with inRange.color as a low→high scale (e.g. ['#22c55e','#eab308','#ef4444']). Do NOT set visualMap min/max — the renderer fills them from the real data.
@@ -1021,10 +1141,13 @@ func AskData(c *fiber.Ctx) error {
 		return c.Status(401).JSON(fiber.Map{"success": false, "error": fiber.Map{"message": "unauthorized"}})
 	}
 	var body struct {
-		Question string `json:"question"`
-		Context  *struct {
+		Question  string `json:"question"`
+		Dataset   string `json:"dataset"`   // "" / "telemetry" | "canonical"
+		FactoryID string `json:"factoryId"` // required by "canonical"
+		Context   *struct {
 			Question      string  `json:"question"`
 			SQL           string  `json:"sql"`
+			Spec          string  `json:"spec"`
 			Clarification string  `json:"clarification"`
 			WindowHours   float64 `json:"windowHours"`
 		} `json:"context"`
@@ -1039,50 +1162,68 @@ func AskData(c *fiber.Ctx) error {
 	// if a caller somehow sent both.
 	var prev *prevTurn
 	if body.Context != nil {
-		if s := strings.TrimSpace(body.Context.SQL); s != "" {
+		switch {
+		case strings.TrimSpace(body.Context.Spec) != "":
+			prev = &prevTurn{Question: body.Context.Question, Spec: body.Context.Spec,
+				SQL: body.Context.SQL, WindowHours: body.Context.WindowHours}
+		case strings.TrimSpace(body.Context.SQL) != "":
 			prev = &prevTurn{Question: body.Context.Question, SQL: body.Context.SQL, WindowHours: body.Context.WindowHours}
-		} else if c := strings.TrimSpace(body.Context.Clarification); c != "" {
+		case strings.TrimSpace(body.Context.Clarification) != "":
 			prev = &prevTurn{Question: body.Context.Question, Clarification: body.Context.Clarification}
 		}
 	}
 	question := strings.TrimSpace(body.Question)
-	schema := buildSchemaContext(ctx, user.OrgId)
+	scope := askScope{Dataset: body.Dataset, FactoryID: body.FactoryID}
+	schema, err := schemaFor(ctx, scope, user.OrgId)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"success": false,
+			"error": fiber.Map{"message": "unknown data scope: " + err.Error()}})
+	}
+	// The canonical path resolves the catalog once per request: the prompt above and
+	// the compiler below read the SAME loaded catalog, so what the model is told and
+	// what the server enforces cannot drift apart.
+	var cat *catalog
+	if scope.canonical() {
+		if cat, err = loadCatalog(ctx, scope.FactoryID); err != nil {
+			return askAIError(c, "could not load the factory catalog: ", err)
+		}
+	}
 
-	// Retry loop: up to 3 attempts to generate and validate SQL.
+	// Retry loop: up to 3 attempts to generate and validate SQL (or a spec).
 	var cols []string
 	var rows [][]any
 	var sqlText string
+	var specText string
+	var bucketUsed string
+	var bandCols []string // gauge min/max envelope columns, if the compiler added any
 	var fixup *sqlFixup
 	// The window the emitted SQL's $1/$2 were bound to. Returned to the client so a
 	// zoom (RunSQL with an explicit range) starts from what is actually on screen.
 	var windowHours float64
 	var from, to time.Time
 	for attempt := 1; attempt <= 3; attempt++ {
-		emission, err := emitSQL(ctx, question, schema, prev, fixup)
+		var emission sqlEmission
+		var spec specEmission
+		var err error
+		if scope.canonical() {
+			spec, err = emitSpec(ctx, question, schema, prev, fixup)
+		} else {
+			emission, err = emitSQL(ctx, question, schema, prev, fixup)
+		}
 		if errors.Is(err, errNotDataQuestion) {
-			// Not a SQL query — answer in prose. Re-run the previous turn's SQL first
-			// (same validate + org-scoped guards) so an "analyze the chart" answer is
-			// grounded in the real rows; on any re-run failure just answer without them.
+			// Not a data query — answer in prose. Re-run the previous turn first (same
+			// guards) so an "analyze the chart" answer is grounded in the real rows; on
+			// any re-run failure just answer without them.
 			var pcols []string
 			var prows [][]any
 			var psummary string
-			if prev != nil && prev.SQL != "" {
-				if s, verr := validateSQL(prev.SQL); verr == nil {
-					pfrom, pto := windowFor(prev.WindowHours)
-					ptext, pargs := resolveSQL(s, pfrom, pto)
-					if cs, rs, rerr := runScoped(ctx, user.OrgId, ptext, pargs...); rerr == nil {
-						pcols = cs
-						psummary = summarizeRows(cs, rs) // over ALL rows — extremes never sampled away
-						prows = downsampleRows(rs, 40)   // ~40 points, trend shape only
-						log.Printf("[ask prose] grounded: reran prev.SQL, rows=%d windowHours=%.0f", len(rs), prev.WindowHours)
-					} else {
-						log.Printf("[ask prose] NOT grounded: prev.SQL re-run failed: %v", rerr)
-					}
-				} else {
-					log.Printf("[ask prose] NOT grounded: prev.SQL failed validation: %v", verr)
-				}
-			} else {
-				log.Printf("[ask prose] NOT grounded: no prev.SQL in context (prev=%t)", prev != nil)
+			if cs, rs, rerr := rerunPrev(ctx, user.OrgId, scope, cat, prev); rerr == nil && len(rs) > 0 {
+				pcols = cs
+				psummary = summarizeRows(cs, rs) // over ALL rows — extremes never sampled away
+				prows = downsampleRows(rs, 40)   // ~40 points, trend shape only
+				log.Printf("[ask prose] grounded: reran previous turn, rows=%d windowHours=%.0f", len(rs), prev.WindowHours)
+			} else if rerr != nil {
+				log.Printf("[ask prose] NOT grounded: %v", rerr)
 			}
 			answer, perr := emitProse(ctx, question, schema, prev, pcols, prows, psummary, "")
 			if perr != nil {
@@ -1102,10 +1243,48 @@ func AskData(c *fiber.Ctx) error {
 		if err != nil {
 			return askAIError(c, "could not generate a query: ", err)
 		}
-		if emission.Clarification != "" {
+		if clar := firstNonEmpty(emission.Clarification, spec.Clarification); clar != "" {
 			// B3: the question is about factory data but under-specified — ask back
 			// instead of guessing. No SQL ran, no chart to build.
-			return c.JSON(fiber.Map{"success": true, "data": fiber.Map{"clarification": emission.Clarification}})
+			return c.JSON(fiber.Map{"success": true, "data": fiber.Map{"clarification": clar}})
+		}
+
+		if scope.canonical() {
+			windowHours = spec.WindowHours
+			from, to = windowFor(windowHours)
+			if spec.From != nil && spec.To != nil {
+				from, to = *spec.From, *spec.To
+				windowHours = to.Sub(from).Hours()
+			}
+			bucketUsed = autoBucket(to.Sub(from))
+			comp, cerr := cat.compile(spec.Spec, from, to, bucketUsed)
+			if cerr != nil {
+				// The spec named something outside the catalog. Hand the reason back —
+				// the model can only recover by picking a metric that really exists.
+				if attempt < 3 {
+					fixup = &sqlFixup{SQL: specJSON(spec.Spec), Err: cerr.Error()}
+					continue
+				}
+				return c.Status(400).JSON(fiber.Map{"success": false,
+					"error": fiber.Map{"message": "could not compile the query: " + cerr.Error()},
+					"spec":  specJSON(spec.Spec)})
+			}
+			sqlText, specText, bandCols = comp.SQL, specJSON(spec.Spec), comp.Band
+			if comp.Tier == "catalog" {
+				bucketUsed = "" // a listing has no resolution to report
+			}
+			cols, rows, err = runScopedIn(ctx, user.OrgId, scope.FactoryID, comp.SQL, comp.Args...)
+			if err != nil {
+				if attempt < 3 {
+					fixup = &sqlFixup{SQL: specText, Err: err.Error()}
+					continue
+				}
+				return c.Status(400).JSON(fiber.Map{"success": false,
+					"error": fiber.Map{"message": "query failed: " + err.Error()}, "sql": sqlText})
+			}
+			// A compiled query is always aggregated and always limited, so the
+			// truncation check below (needsBucketing) cannot apply here.
+			break
 		}
 
 		sqlText, err = validateSQL(emission.SQL)
@@ -1119,6 +1298,12 @@ func AskData(c *fiber.Ctx) error {
 
 		windowHours = emission.WindowHours
 		from, to = windowFor(windowHours)
+		// An absolute calendar range ("May 2026") overrides the relative window; report
+		// its real span as windowHours so a later zoom re-anchors from what's on screen.
+		if emission.From != nil && emission.To != nil {
+			from, to = *emission.From, *emission.To
+			windowHours = to.Sub(from).Hours()
+		}
 		runText, args := resolveSQL(sqlText, from, to)
 		cols, rows, err = runScoped(ctx, user.OrgId, runText, args...)
 		if err != nil {
@@ -1147,11 +1332,18 @@ func AskData(c *fiber.Ctx) error {
 	option, caption := json.RawMessage("{}"), ""
 	var analysis, nextQuestion string
 	if len(rows) > 0 && hasNumericColumn(cols, rows) {
-		bucket := chartBucket(sqlText, from, to)
+		bucket := bucketUsed
+		if !scope.canonical() {
+			bucket = chartBucket(sqlText, from, to)
+		}
 		summary := summarizeRows(cols, rows) // grounds the folded analysis in real per-machine stats
-		ce, err := emitEChart(ctx, body.Question, cols, sampleRows(rows, 20), "", bucket, summary)
+		// The min/max envelope stays out of the charting call: the model keeps
+		// encoding the mean as before, and the frontend shades the band from the
+		// columns it finds by name. Leaving them in would invite a third line.
+		ccols, crows := hideColumns(cols, sampleRows(rows, 20), bandCols)
+		ce, err := emitEChart(ctx, body.Question, ccols, crows, "", bucket, summary)
 		if err != nil {
-			ce, err = emitEChart(ctx, body.Question, cols, sampleRows(rows, 20), err.Error(), bucket, summary)
+			ce, err = emitEChart(ctx, body.Question, ccols, crows, err.Error(), bucket, summary)
 		}
 		if err == nil {
 			option, caption = sanitizeEChartOption(ce.Option, cols), ce.Caption
@@ -1170,6 +1362,7 @@ func AskData(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{"success": true, "data": fiber.Map{
 		"sql":          sqlText,
+		"spec":         specText, // canonical path: what a zoom or a saved board replays
 		"columns":      cols,
 		"rows":         rows,
 		"echartOption": option,
@@ -1180,6 +1373,51 @@ func AskData(c *fiber.Ctx) error {
 		"from":         from,
 		"to":           to,
 	}})
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if s := strings.TrimSpace(v); s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+// rerunPrev re-executes the previous turn so a prose follow-up ("what does this
+// chart show") is grounded in the same rows the user is looking at. A spec is
+// recompiled; SQL text is re-validated and re-bound. Both go through the same
+// read-only, scoped path as the original.
+func rerunPrev(ctx context.Context, orgID string, scope askScope, cat *catalog, prev *prevTurn) ([]string, [][]any, error) {
+	if prev == nil {
+		return nil, nil, nil // nothing to ground on, not an error
+	}
+	from, to := windowFor(prev.WindowHours)
+
+	if scope.canonical() && prev.Spec != "" {
+		if cat == nil {
+			return nil, nil, errors.New("no catalog loaded for this scope")
+		}
+		var spec querySpec
+		if err := json.Unmarshal([]byte(prev.Spec), &spec); err != nil {
+			return nil, nil, fmt.Errorf("previous spec unreadable: %w", err)
+		}
+		comp, err := cat.compile(spec, from, to, autoBucket(to.Sub(from)))
+		if err != nil {
+			return nil, nil, fmt.Errorf("previous spec no longer compiles: %w", err)
+		}
+		return runScopedIn(ctx, orgID, scope.FactoryID, comp.SQL, comp.Args...)
+	}
+
+	if prev.SQL == "" {
+		return nil, nil, nil
+	}
+	s, err := validateSQL(prev.SQL)
+	if err != nil {
+		return nil, nil, fmt.Errorf("previous SQL failed validation: %w", err)
+	}
+	text, args := resolveSQL(s, from, to)
+	return runScoped(ctx, orgID, text, args...)
 }
 
 // verifyAndRepairAnswer runs the B1 judge on a delivered answer — chart AND table
@@ -1236,16 +1474,14 @@ func RunSQL(c *fiber.Ctx) error {
 	}
 	var body struct {
 		SQL         string     `json:"sql"`
+		Spec        string     `json:"spec"`      // canonical path: recompiled, not replayed
+		FactoryID   string     `json:"factoryId"` // required with spec
 		From        *time.Time `json:"from"`
 		To          *time.Time `json:"to"`
 		WindowHours float64    `json:"windowHours"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return c.Status(400).JSON(fiber.Map{"success": false, "error": fiber.Map{"message": "sql is required"}})
-	}
-	sqlText, err := validateSQL(body.SQL)
-	if err != nil {
-		return c.Status(400).JSON(fiber.Map{"success": false, "error": fiber.Map{"message": err.Error()}})
 	}
 	from, to := windowFor(body.WindowHours)
 	if body.From != nil && body.To != nil {
@@ -1254,8 +1490,42 @@ func RunSQL(c *fiber.Ctx) error {
 		}
 		from, to = *body.From, *body.To
 	}
+	ctx := context.Background()
+
+	// Zooming a canonical chart RECOMPILES the stored spec at the new window, so it
+	// also drops to a finer rollup tier automatically. Nothing here calls the model:
+	// zoom stayed free, and a spec keeps working even when the relations change.
+	if s := strings.TrimSpace(body.Spec); s != "" {
+		if body.FactoryID == "" {
+			return c.Status(400).JSON(fiber.Map{"success": false, "error": fiber.Map{"message": "factoryId is required with spec"}})
+		}
+		var spec querySpec
+		if err := json.Unmarshal([]byte(s), &spec); err != nil {
+			return c.Status(400).JSON(fiber.Map{"success": false, "error": fiber.Map{"message": "invalid spec: " + err.Error()}})
+		}
+		cat, err := loadCatalog(ctx, body.FactoryID)
+		if err != nil {
+			return c.Status(400).JSON(fiber.Map{"success": false, "error": fiber.Map{"message": "unknown factory: " + err.Error()}})
+		}
+		bucket := autoBucket(to.Sub(from))
+		comp, err := cat.compile(spec, from, to, bucket)
+		if err != nil {
+			return c.Status(400).JSON(fiber.Map{"success": false, "error": fiber.Map{"message": "could not compile spec: " + err.Error()}})
+		}
+		cols, rows, err := runScopedIn(ctx, user.OrgId, body.FactoryID, comp.SQL, comp.Args...)
+		if err != nil {
+			return c.Status(400).JSON(fiber.Map{"success": false, "error": fiber.Map{"message": "query failed: " + err.Error()}})
+		}
+		return c.JSON(fiber.Map{"success": true, "data": fiber.Map{
+			"columns": cols, "rows": rows, "from": from, "to": to, "bucket": comp.Bucket}})
+	}
+
+	sqlText, err := validateSQL(body.SQL)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"success": false, "error": fiber.Map{"message": err.Error()}})
+	}
 	runText, args := resolveSQL(sqlText, from, to)
-	cols, rows, err := runScoped(context.Background(), user.OrgId, runText, args...)
+	cols, rows, err := runScoped(ctx, user.OrgId, runText, args...)
 	if err != nil {
 		return c.Status(400).JSON(fiber.Map{"success": false, "error": fiber.Map{"message": "query failed: " + err.Error()}})
 	}

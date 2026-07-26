@@ -8,6 +8,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"iot-dashboard/internal/database"
 	"iot-dashboard/internal/middleware"
@@ -86,20 +87,23 @@ func GetBoard(c *fiber.Ctx) error {
 		return c.Status(404).JSON(fiber.Map{"success": false, "error": fiber.Map{"message": "board not found"}})
 	}
 	rows, err := database.Pool.Query(context.Background(),
-		`SELECT id, question, sql, echart_option, COALESCE(window_hours, 0) FROM ai_board_charts WHERE board_id = $1 ORDER BY "order", created_at`, id)
+		`SELECT id, question, sql, COALESCE(spec::text, ''), COALESCE(factory_id::text, ''),
+		        echart_option, COALESCE(window_hours, 0)
+		 FROM ai_board_charts WHERE board_id = $1 ORDER BY "order", created_at`, id)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"success": false, "error": fiber.Map{"message": err.Error()}})
 	}
 	defer rows.Close()
 	charts := []fiber.Map{}
 	for rows.Next() {
-		var cid, question, sqlText string
+		var cid, question, sqlText, spec, factoryID string
 		var option json.RawMessage
 		var windowHours float64
-		if err := rows.Scan(&cid, &question, &sqlText, &option, &windowHours); err != nil {
+		if err := rows.Scan(&cid, &question, &sqlText, &spec, &factoryID, &option, &windowHours); err != nil {
 			return c.Status(500).JSON(fiber.Map{"success": false, "error": fiber.Map{"message": err.Error()}})
 		}
-		charts = append(charts, fiber.Map{"id": cid, "question": question, "sql": sqlText, "echartOption": option, "windowHours": windowHours})
+		charts = append(charts, fiber.Map{"id": cid, "question": question, "sql": sqlText,
+			"spec": spec, "factoryId": factoryID, "echartOption": option, "windowHours": windowHours})
 	}
 	return c.JSON(fiber.Map{"success": true, "data": fiber.Map{"id": id, "name": name, "charts": charts}})
 }
@@ -161,25 +165,43 @@ func AddBoardChart(c *fiber.Ctx) error {
 	var body struct {
 		Question     string          `json:"question"`
 		SQL          string          `json:"sql"`
+		Spec         string          `json:"spec"`      // canonical charts: replayed by recompiling this
+		FactoryID    string          `json:"factoryId"` // which factory the spec belongs to
 		EchartOption json.RawMessage `json:"echartOption"`
 		WindowHours  float64         `json:"windowHours"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return c.Status(400).JSON(fiber.Map{"success": false, "error": fiber.Map{"message": "invalid body"}})
 	}
-	sqlText, err := validateSQL(body.SQL)
-	if err != nil {
-		return c.Status(400).JSON(fiber.Map{"success": false, "error": fiber.Map{"message": "sql rejected: " + err.Error()}})
+	// A canonical chart is defined by its spec; the SQL is stored only so the chart
+	// can still be read back and debugged. Compiled SQL joins base relations that
+	// validateSQL denies to model-written queries, so it is not re-validated here.
+	spec := strings.TrimSpace(body.Spec)
+	sqlText := body.SQL
+	if spec == "" {
+		var err error
+		if sqlText, err = validateSQL(body.SQL); err != nil {
+			return c.Status(400).JSON(fiber.Map{"success": false, "error": fiber.Map{"message": "sql rejected: " + err.Error()}})
+		}
+	} else if !json.Valid([]byte(spec)) {
+		return c.Status(400).JSON(fiber.Map{"success": false, "error": fiber.Map{"message": "spec is not valid JSON"}})
 	}
 	if len(body.EchartOption) == 0 {
 		body.EchartOption = json.RawMessage("{}")
 	}
+	var specArg, factoryArg any
+	if spec != "" {
+		specArg = spec
+	}
+	if body.FactoryID != "" {
+		factoryArg = body.FactoryID
+	}
 	var id string
-	err = database.Pool.QueryRow(context.Background(),
-		`INSERT INTO ai_board_charts (board_id, question, sql, echart_option, window_hours, "order")
-		 VALUES ($1, $2, $3, $4, $5, (SELECT COALESCE(MAX("order")+1, 0) FROM ai_board_charts WHERE board_id = $1))
+	err := database.Pool.QueryRow(context.Background(),
+		`INSERT INTO ai_board_charts (board_id, question, sql, spec, factory_id, echart_option, window_hours, "order")
+		 VALUES ($1, $2, $3, $4::jsonb, $5::uuid, $6, $7, (SELECT COALESCE(MAX("order")+1, 0) FROM ai_board_charts WHERE board_id = $1))
 		 RETURNING id`,
-		boardID, body.Question, sqlText, body.EchartOption, body.WindowHours).Scan(&id)
+		boardID, body.Question, sqlText, specArg, factoryArg, body.EchartOption, body.WindowHours).Scan(&id)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"success": false, "error": fiber.Map{"message": err.Error()}})
 	}

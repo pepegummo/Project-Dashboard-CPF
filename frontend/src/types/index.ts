@@ -296,8 +296,19 @@ export interface AiChatIntent {
 }
 
 // ─── Ask Data (NL → SQL → ECharts) ───────────────────────────────────────────
+export interface AskScope {
+  dataset: string; // 'telemetry' (demo/mock) | 'canonical' (a real factory)
+  label: string;
+  factoryId: string;
+  sources?: number;
+}
+
 export interface AskDataResult {
   sql: string;
+  // Canonical scopes return the query spec that produced the chart. Zoom and saved
+  // boards replay the spec (recompiled server-side), not the SQL text, so a chart
+  // keeps working when the relations underneath it change.
+  spec?: string;
   columns: string[];
   rows: unknown[][];
   echartOption: Record<string, unknown>;
@@ -324,6 +335,10 @@ export interface AskBoardChart {
   id: string;
   question: string;
   sql: string;
+  // Canonical charts replay by recompiling this spec for the given factory; charts
+  // saved from the legacy views have only sql and replay that instead.
+  spec?: string;
+  factoryId?: string;
   echartOption: Record<string, unknown>;
   windowHours?: number; // 0 for charts saved before windows became parameters
 }

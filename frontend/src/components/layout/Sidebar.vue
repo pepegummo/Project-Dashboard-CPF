@@ -22,6 +22,7 @@ const navItems = [
   { to: '/alerts',      icon: Bell,              label: 'Alerts', badge: true },
   { to: '/ai',          icon: Bot,               label: 'AI Assistant' },
   { to: '/ask',         icon: Sparkles,          label: 'Ask Data' },
+  { to: '/nj5',         icon: Factory,           label: 'NJ5' },
 ];
 
 const isActive = (path: string) => route.path.startsWith(path);
