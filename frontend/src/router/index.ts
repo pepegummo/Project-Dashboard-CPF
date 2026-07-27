@@ -1,11 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
 import { useAuthStore } from '@/stores/auth.store';
 
-// The factory id scripts/nj5-registry.sql seeds. /nj5 is the sidebar entry for it, and
-// AskDataPage sends the scope picker back to this route when that plant is chosen, so
-// the highlighted nav item always matches the data on screen.
-export const NJ5_FACTORY_ID = '00000000-0000-0000-0001-000000004046';
-
 const routes: RouteRecordRaw[] = [
   {
     path: '/login',
@@ -59,19 +54,17 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/ask',
+    redirect: '/ask/demo',
+  },
+  {
+    // One URL shape for every dataset: /ask/demo is the mock telemetry, /ask/<slug>
+    // is one real plant (factories.slug, owned by the source registry, e.g. /ask/nj5).
+    // A factory with no slug is addressed by its uuid. The page resolves the param
+    // against GET /ai/scopes, so standing up plant #2 needs no change here.
+    path: '/ask/:scope',
     name: 'AskData',
     component: () => import('@/pages/AskDataPage.vue'),
     meta: { requiresAuth: true, title: 'Ask Data' },
-  },
-  {
-    // Same page as /ask, preset to the Nongjok5 factory in the canonical dataset.
-    // The factory id is the fixed one scripts/nj5-registry.sql seeds; the page falls
-    // back to the first available scope if that factory has no registered sources.
-    path: '/nj5',
-    name: 'AskNJ5',
-    component: () => import('@/pages/AskDataPage.vue'),
-    props: { dataset: 'canonical', factoryId: NJ5_FACTORY_ID },
-    meta: { requiresAuth: true, title: 'NJ5' },
   },
   {
     path: '/:pathMatch(.*)*',

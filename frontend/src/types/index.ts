@@ -300,6 +300,7 @@ export interface AskScope {
   dataset: string; // 'telemetry' (demo/mock) | 'canonical' (a real factory)
   label: string;
   factoryId: string;
+  slug?: string; // URL name — /ask/<slug>; empty falls back to /ask/<factoryId>
   sources?: number;
 }
 

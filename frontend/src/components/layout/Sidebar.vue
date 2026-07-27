@@ -21,11 +21,13 @@ const navItems = [
   { to: '/machines',    icon: MonitorSpeaker,    label: 'Machines' },
   { to: '/alerts',      icon: Bell,              label: 'Alerts', badge: true },
   { to: '/ai',          icon: Bot,               label: 'AI Assistant' },
-  { to: '/ask',         icon: Sparkles,          label: 'Ask Data' },
-  { to: '/nj5',         icon: Factory,           label: 'NJ5' },
+  { to: '/ask/demo',    icon: Sparkles,          label: 'Ask Data' },
+  { to: '/ask/nj5',     icon: Factory,           label: 'NJ5' },
 ];
 
-const isActive = (path: string) => route.path.startsWith(path);
+// Exact-or-child, not a bare prefix: /dashboards must still light up on /dashboards/:id,
+// but /ask/demo must NOT light up on /ask/nj5.
+const isActive = (path: string) => route.path === path || route.path.startsWith(path + '/');
 const alertCount = computed(() => alertStore.openCount);
 const memberOrgs = computed(() => auth.organizations.filter(o => o.isMember));
 

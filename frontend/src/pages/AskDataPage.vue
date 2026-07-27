@@ -2,7 +2,6 @@
 import { ref, computed, onMounted, reactive, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/services/api.service';
-import { NJ5_FACTORY_ID } from '@/router';
 import type { AskDataResult, AskBoardSummary, AskBoard, AskBoardChart, AskScope } from '@/types';
 import { Sparkles, Loader2, Save, Trash2, RefreshCw, User, Plus, Pencil, ZoomOut } from 'lucide-vue-next';
 import { marked } from 'marked';
@@ -10,23 +9,22 @@ import DOMPurify from 'dompurify';
 
 // Which data this page asks against. 'canonical' + a factoryId is one real plant
 // (registry-driven, server-compiled queries); 'telemetry' is the demo org data.
-// A route may preset a scope; the picker below lists whatever the backend offers,
-// so standing up another plant needs no change here.
-const props = defineProps<{ dataset?: string; factoryId?: string }>();
-
+// The URL carries it: /ask/demo, or /ask/<factories.slug> for a plant. The picker
+// below lists whatever the backend offers, so another plant needs no change here.
 const route = useRoute();
 const router = useRouter();
 
-// A factory can also be addressed as /ask?factory=<id>, which is what the picker
-// navigates to for any plant without its own sidebar entry.
-const queryFactory = typeof route.query.factory === 'string' ? route.query.factory : '';
-
+// 'demo' resolves synchronously; a plant's slug does not — only /ai/scopes can turn
+// it into a factoryId, so the scope starts unresolved (factoryId '') and `ready`
+// below keeps the page from asking against nothing in the meantime.
+const scopeParam = String(route.params.scope ?? 'demo');
 const scopes = ref<AskScope[]>([]);
-const scope = ref<AskScope>({
-  dataset: props.dataset ?? (queryFactory ? 'canonical' : 'telemetry'),
-  factoryId: props.factoryId ?? queryFactory,
-  label: props.dataset === 'canonical' || queryFactory ? 'Factory' : 'Demo telemetry',
-});
+const scope = ref<AskScope>(
+  scopeParam === 'demo'
+    ? { dataset: 'telemetry', factoryId: '', label: 'Demo telemetry' }
+    : { dataset: 'canonical', factoryId: '', label: 'Factory' },
+);
+const ready = computed(() => scope.value.dataset !== 'canonical' || !!scope.value.factoryId);
 
 const heading = computed(() =>
   scope.value.dataset === 'canonical' ? `Ask ${scope.value.label}` : 'Ask your data',
@@ -37,17 +35,19 @@ const askPlaceholder = computed(() =>
     : 'e.g. average speed per machine over the last 24 hours, hourly',
 );
 
-// The scope list also resolves a preset route (/nj5) to its real label; a preset
-// factory that no longer has registered sources falls back to the first scope so the
-// page is never stuck pointing at nothing.
+// This is what turns the URL param into a real scope: /ask/nj5 → the factoryId and
+// label behind slug 'nj5'. A slug that no longer has registered sources falls back to
+// the first scope so the page is never stuck pointing at nothing.
 async function loadScopes() {
   try {
     scopes.value = await api.askScopes();
   } catch {
-    return; // keep the preset scope — the picker just stays hidden
+    return; // keep the unresolved scope — the picker just stays hidden
   }
-  const match = scopes.value.find(
-    (s) => s.dataset === scope.value.dataset && s.factoryId === scope.value.factoryId,
+  const match = scopes.value.find((s) =>
+    scopeParam === 'demo'
+      ? s.dataset !== 'canonical'
+      : s.slug === scopeParam || s.factoryId === scopeParam,
   );
   if (match) scope.value = match;
   // Falling back goes through switchScope so the URL follows too — /nj5 must not stay
@@ -58,7 +58,7 @@ async function loadScopes() {
 // Switching plants invalidates everything on screen: different machines, different
 // metrics, and a spec compiled for another factory.
 //
-// It also changes the URL, because the scope IS the page: leaving /nj5 in the address
+// It also changes the URL, because the scope IS the page: leaving /ask/nj5 in the address
 // bar while showing demo data highlights the wrong sidebar entry and bookmarks a lie.
 function switchScope(next: AskScope) {
   scope.value = next;
@@ -68,16 +68,12 @@ function switchScope(next: AskScope) {
   zoomStack.value = [];
   askError.value = '';
 
-  const target =
-    next.dataset !== 'canonical'
-      ? { path: '/ask' }
-      : next.factoryId === NJ5_FACTORY_ID
-        ? { path: '/nj5' }
-        : { path: '/ask', query: { factory: next.factoryId } };
-  // Compare against the live route, not the mount-time query: switching A → B → A
+  const key =
+    next.dataset !== 'canonical' ? 'demo' : next.slug || next.factoryId;
+  // Compare against the live route, not the mount-time param: switching A → B → A
   // must still put A back in the address bar.
-  if (target.path !== route.path || (target.query?.factory ?? '') !== (route.query.factory ?? '')) {
-    router.replace(target); // replace, not push: toggling scope is not navigation history
+  if (key !== route.params.scope) {
+    router.replace(`/ask/${key}`); // replace, not push: toggling scope is not navigation history
   }
 }
 
@@ -369,7 +365,7 @@ function resetZoom() {
 
 async function ask() {
   const q = question.value.trim();
-  if (!q || asking.value) return;
+  if (!q || asking.value || !ready.value) return;
   asking.value = true;
   askError.value = '';
   try {
@@ -601,7 +597,7 @@ onMounted(() => {
           />
           <button
             class="flex items-center gap-2 rounded-xl bg-primary-500 px-7 py-4 text-base font-semibold text-white transition-colors hover:bg-primary-600 disabled:opacity-50"
-            :disabled="asking || !question.trim()"
+            :disabled="asking || !ready || !question.trim()"
             @click="ask"
           >
             <Loader2 v-if="asking" class="h-5 w-5 animate-spin" />

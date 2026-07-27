@@ -74,6 +74,20 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 			updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)`,
+		// slug is the factory's URL name: /ask/<slug> addresses one plant. Nullable —
+		// the unique index allows many NULLs, so a factory without one is still legal
+		// and is addressed by its UUID instead. The registry script owns the slug for
+		// a real plant (scripts/nj5-registry.sql sets 'nj5'); this only derives one
+		// for rows that arrived without.
+		`ALTER TABLE factories ADD COLUMN IF NOT EXISTS slug TEXT`,
+		// ponytail: collisions are skipped, not disambiguated with a suffix — a failed
+		// backfill would block startup, and a slugless factory degrades to its UUID.
+		`UPDATE factories f SET slug = lower(regexp_replace(f.name, '[^a-zA-Z0-9]+', '-', 'g'))
+		 WHERE COALESCE(f.slug, '') = ''
+		   AND NOT EXISTS (
+		     SELECT 1 FROM factories o WHERE o.id <> f.id
+		       AND o.slug = lower(regexp_replace(f.name, '[^a-zA-Z0-9]+', '-', 'g')))`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS factories_slug_key ON factories (slug)`,
 
 		// ── production_lines ─────────────────────────────────────────────────
 		`CREATE TABLE IF NOT EXISTS production_lines (

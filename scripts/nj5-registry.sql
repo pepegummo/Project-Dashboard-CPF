@@ -13,10 +13,12 @@ INSERT INTO organizations (id, name, slug, plan)
 VALUES ('00000000-0000-0000-0000-000000004046', 'CPF Nongjok', 'cpf-nongjok', 'enterprise')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO factories (id, organization_id, name, location, timezone)
+-- slug is this plant's URL name — the page is /ask/nj5. DO UPDATE (not DO NOTHING)
+-- so re-running sets it on a factory row that predates the slug column.
+INSERT INTO factories (id, organization_id, name, location, timezone, slug)
 VALUES ('00000000-0000-0000-0001-000000004046', '00000000-0000-0000-0000-000000004046',
-        'Nongjok5', 'Nongjok, Bangkok', 'Asia/Bangkok')
-ON CONFLICT (id) DO NOTHING;
+        'Nongjok5', 'Nongjok, Bangkok', 'Asia/Bangkok', 'nj5')
+ON CONFLICT (id) DO UPDATE SET slug = EXCLUDED.slug;
 
 INSERT INTO production_lines (id, factory_id, name, code, status)
 VALUES ('00000000-0000-0000-0002-000000004046', '00000000-0000-0000-0001-000000004046',

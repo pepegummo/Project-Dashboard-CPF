@@ -74,7 +74,7 @@ func (r *Repository) FindAll(ctx context.Context, orgID, userID string) ([]Dashb
 	}
 	defer rows.Close()
 
-	var dashboards []Dashboard
+	dashboards := []Dashboard{} // ponytail: non-nil so empty org marshals to [] not null
 	for rows.Next() {
 		var d Dashboard
 		var tags []string

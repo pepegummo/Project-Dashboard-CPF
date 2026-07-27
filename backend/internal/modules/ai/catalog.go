@@ -217,20 +217,21 @@ func ListScopes(c *fiber.Ctx) error {
 		{"dataset": "telemetry", "label": "Demo telemetry", "factoryId": ""},
 	}
 	rows, err := database.Pool.Query(context.Background(), `
-		SELECT f.id::text, f.name, count(DISTINCT st.id)
+		SELECT f.id::text, f.name, COALESCE(f.slug, ''), count(DISTINCT st.id)
 		FROM factories f
 		JOIN source_tables st ON st.factory_id = f.id AND st.enabled
-		GROUP BY 1, 2 ORDER BY 2`)
+		GROUP BY 1, 2, 3 ORDER BY 2`)
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
-			var id, name string
+			var id, name, slug string
 			var sources int
-			if err := rows.Scan(&id, &name, &sources); err != nil {
+			if err := rows.Scan(&id, &name, &slug, &sources); err != nil {
 				break
 			}
 			scopes = append(scopes, fiber.Map{
-				"dataset": "canonical", "label": name, "factoryId": id, "sources": sources,
+				"dataset": "canonical", "label": name, "factoryId": id,
+				"slug": slug, "sources": sources,
 			})
 		}
 	}
