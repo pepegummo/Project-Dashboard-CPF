@@ -280,6 +280,33 @@ Every fact that used to be a sentence in the prompt is now a column: "count_fg i
 
 **Normalizer** (`internal/normalizer/`, same `New/Start/Stop` + ticker shape as `internal/broadcaster`, wired in `cmd/server/main.go`, 30s tick). Per enabled source: read the watermark and step back `overlap_seconds`; build the `SELECT` from registry expressions (identifiers quoted with `pgx.Identifier{}.Sanitize()`, no user input reaches it); resolve the machine, inserting an `auto_discovery` row if it is new (a machine the plant adds overnight is answerable the next morning); resolve `(machine, field_key, labels)` to a `series`; unpivot into `readings` with `quality` set from `sentinel`/`valid_min`/`valid_max` (**the value is kept**, filtering happens at serving time); insert with `ON CONFLICT (series_id, ts) DO NOTHING` so the overlap re-read and any replay are free; advance the watermark in the same transaction, forward-only. An error is written to `source_state.last_error` without killing the worker. `cmd/normalize-backfill` drains a historical dump in one pass and then refreshes the continuous aggregates over all time (the refresh *policy* only covers a recent window, so a year-old dump would otherwise never be materialized).
 
+```mermaid
+flowchart TD
+  T["tick"] --> LS["loadSources — enabled source_tables + their source_metrics"]
+  LS --> W["since = source_state.last_watermark − overlap_seconds"]
+  W --> F["SELECT ts_expr, machine_expr, label_exprs, value_exprs<br/>FROM landing WHERE (ts_expr) > since ORDER BY 1 LIMIT batch_rows"]
+  F --> M["resolveMachine — insert metadata.discovery row if unseen"]
+  M --> S["resolveSeries — (machine, field_key, labels) → series.id"]
+  S --> R["unpivot → readings, quality from sentinel/valid_min/valid_max<br/>ON CONFLICT (series_id, ts) DO NOTHING"]
+  R --> A["advance watermark, forward-only"]
+  A -->|"worker: next tick in 30s"| T
+  A -->|"backfill: got == batch_rows"| W
+  A -->|"backfill: got < batch_rows"| CA["CALL refresh_continuous_aggregate('readings_1h' then 'readings_1d', NULL, NULL)"]
+  F -.->|"error"| E["source_state.last_error<br/>worker: next source, retry next tick<br/>backfill: abort the run"]
+```
+
+**Worker vs. backfill** — same engine (`syncSource`), different driver:
+
+| | worker (`internal/normalizer`, `main.go:93`) | CLI (`cmd/normalize-backfill`) |
+|---|---|---|
+| lifetime | 30s ticker, runs with the server | one pass, then exits |
+| batches per source | one per tick | loops until a short batch — drains everything |
+| context timeout | 5 min per tick | 6 h for the whole run |
+| a source errors | recorded, other sources continue, retried next tick | aborts the run |
+| continuous aggregates | untouched — relies on the refresh *policy* (7d for `readings_1h`, 30d for `readings_1d`) | refreshed over all time, hourly before daily |
+
+Both take the same watermark/overlap path and write idempotently, so the CLI is safe to run against a live server. Reach for it after registering a source (the worker starts from the current watermark and never looks back) or after loading a historical dump (rows land in `readings`, but a wide-window question reads rollups that the policy will never materialize that far back). Steady-state ingest needs neither.
+
 **Rollup ladder.** `readings_1h` aggregates raw readings where `quality = 0`; `readings_1d` is a hierarchical continuous aggregate over `readings_1h`. Both store `sum_v, n, min_v, max_v, first_v, last_v` — **not** `avg`, because an average of hourly averages is wrong whenever buckets hold different numbers of readings; `sum_v/n` gives the exact weighted mean at any level. There is deliberately no 1-minute rollup (readings already arrive about once a minute, so it would have as many rows as the raw table); narrow windows read raw.
 
 **Catalog → prompt** (`catalog.go`). `loadCatalog(ctx, factoryID)` (`catalog.go:83`) reads the registry joined with the series that actually exist; `promptContext()` (`catalog.go:243`) renders it. The cache is keyed by a version stamp (`max(updated_at)` + row counts, `catalogVersion` `catalog.go:189`), so a steady system produces byte-identical prompts (provider cache stays warm) and registering a metric invalidates it by itself. Prompt size grows with the number of *metric kinds*, not machines: metrics are described once per `machine_type`, the machine list caps at 24 and label values at 30 (beyond that the model is told to ask the catalog with `shape=list`), and one question is scoped to one factory — so ten plants cost the same prompt as one.

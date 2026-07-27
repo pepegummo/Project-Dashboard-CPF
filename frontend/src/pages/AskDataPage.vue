@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, reactive, nextTick } from 'vue';
+import { ref, computed, onMounted, reactive, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/services/api.service';
 import type { AskDataResult, AskBoardSummary, AskBoard, AskBoardChart, AskScope } from '@/types';
@@ -14,13 +14,19 @@ import DOMPurify from 'dompurify';
 const route = useRoute();
 const router = useRouter();
 
+// 'demo' | <slug> | <factoryId> — a scope's URL name, and its inverse.
+const scopeKey = (s: AskScope) => (s.dataset !== 'canonical' ? 'demo' : s.slug || s.factoryId);
+const findScope = (key: string) =>
+  scopes.value.find((s) =>
+    key === 'demo' ? s.dataset !== 'canonical' : s.slug === key || s.factoryId === key);
+
 // 'demo' resolves synchronously; a plant's slug does not — only /ai/scopes can turn
 // it into a factoryId, so the scope starts unresolved (factoryId '') and `ready`
 // below keeps the page from asking against nothing in the meantime.
-const scopeParam = String(route.params.scope ?? 'demo');
+const paramKey = computed(() => String(route.params.scope ?? 'demo'));
 const scopes = ref<AskScope[]>([]);
 const scope = ref<AskScope>(
-  scopeParam === 'demo'
+  paramKey.value === 'demo'
     ? { dataset: 'telemetry', factoryId: '', label: 'Demo telemetry' }
     : { dataset: 'canonical', factoryId: '', label: 'Factory' },
 );
@@ -44,11 +50,7 @@ async function loadScopes() {
   } catch {
     return; // keep the unresolved scope — the picker just stays hidden
   }
-  const match = scopes.value.find((s) =>
-    scopeParam === 'demo'
-      ? s.dataset !== 'canonical'
-      : s.slug === scopeParam || s.factoryId === scopeParam,
-  );
+  const match = findScope(paramKey.value);
   if (match) scope.value = match;
   // Falling back goes through switchScope so the URL follows too — /nj5 must not stay
   // in the address bar while the page is showing something else.
@@ -68,14 +70,23 @@ function switchScope(next: AskScope) {
   zoomStack.value = [];
   askError.value = '';
 
-  const key =
-    next.dataset !== 'canonical' ? 'demo' : next.slug || next.factoryId;
-  // Compare against the live route, not the mount-time param: switching A → B → A
-  // must still put A back in the address bar.
+  const key = scopeKey(next);
+  // Compare against the live route: switching A → B → A must still put A back in the
+  // address bar, and this is a no-op when the param change is what triggered us.
   if (key !== route.params.scope) {
     router.replace(`/ask/${key}`); // replace, not push: toggling scope is not navigation history
   }
 }
+
+// The sidebar's /ask/demo and /ask/nj5 hit the SAME route record, so vue-router reuses
+// this component instead of re-creating it; a param change is the only signal that the
+// plant changed. Without this the URL and the nav highlight move but the data does not.
+watch(paramKey, (key) => {
+  if (key === scopeKey(scope.value)) return; // switchScope already moved us — don't loop
+  const match = findScope(key);
+  if (match) switchScope(match);
+  else if (scopes.value.length > 0) switchScope(scopes.value[0]);
+});
 
 // What to send to /ai/run-sql to reproduce a chart: a canonical chart is defined by
 // its spec (recompiled server-side, so it also picks a finer rollup when zoomed),
