@@ -2,7 +2,12 @@
 // model in one pass, then exits. Use it after loading a historical dump; the
 // server's normalizer keeps up with the live tail on its own.
 //
-//	go run ./cmd/normalize-backfill
+// Run:	docker compose exec backend ./normalize-backfill
+//
+//	go run ./cmd/normalize-backfill          (from backend/, needs DATABASE_URL)
+//
+// NOT the same tool as ./backfill, which seeds the DEMO telemetry dataset and has
+// nothing to do with the source registry. See docs/onboarding-new-source.md.
 package main
 
 import (
