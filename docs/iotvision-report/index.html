@@ -107,23 +107,25 @@
   .chapter .no{font-size:60pt;font-weight:700;color:#c9d6e8;text-align:center;line-height:1;margin-bottom:2mm}
 
   /* ---- TOC ---- */
-  .toc-item{display:flex;align-items:baseline;font-size:9.5pt;margin:0.25mm 0}
+  .toc-item{display:flex;align-items:baseline;font-size:9.5pt;margin:0.05mm 0}
   .toc-item .t{white-space:nowrap}
   .toc-item .dots{flex:1;border-bottom:1px dotted #b7c0cd;margin:0 2mm;transform:translateY(-1mm)}
   .toc-item .pg{color:var(--muted);font-variant-numeric:tabular-nums}
-  .toc-group{font-weight:700;color:var(--brand-dark);margin:1.6mm 0 0.3mm;font-size:10pt}
+  .toc-group{font-weight:700;color:var(--brand-dark);margin:1.1mm 0 0.2mm;font-size:10pt}
   .sheet.catalog td,.sheet.catalog th{padding:0.45mm 1.5mm;font-size:8pt}
   .sheet.catalog p.indent{margin-bottom:1.5mm}
   .sheet.catalog .note{padding:2mm 3mm;margin:2mm 0}
   .toc-item.sub{padding-left:6mm}
+  /* สารบัญยาวขึ้นตามจำนวนหัวข้อ — บีบเฉพาะหน้านี้ (margin ของ .toc-item ยุบเข้าหากัน
+     จึงลดไม่ได้ผล ต้องตั้งเป็น 0) ตอนนี้ 48 รายการ + 5 กลุ่ม = 53 แถว
+     วัดจริงในเบราว์เซอร์ที่ 8.5pt: เหลือที่ว่างเหนือ footer 83px ≈ อีก ~5 แถว
+     เกินกว่านั้นต้องลด line-height ต่อ — เปิดดูแล้ววัดใหม่ ไม่ใช่เดา */
+  .sheet.toc .toc-item{font-size:8.5pt;line-height:1.3;margin:0}
+  .sheet.toc .toc-group{font-size:9.4pt;line-height:1.3;margin:1.1mm 0 0.2mm}
   /* หน้าที่เนื้อหาพอดีขอบ (2.6 ต่อ 5–8) — บีบเฉพาะระยะห่าง ไม่ลดขนาดตัวอักษร
      ใช้คู่กับ .catalog เท่านั้น วัดแล้วได้ headroom ~3–6mm ต่อหน้า เพิ่มเนื้อหาเมื่อไรต้องวัดใหม่ */
   .sheet.tight h3{margin:2.5mm 0 1.2mm}
   .sheet.tight table{margin:1.5mm 0}
-  /* สารบัญยาวขึ้นตามจำนวนหัวข้อ — บีบระยะบรรทัดให้ยังพอในหนึ่งหน้า
-     9pt พอถึง ~40 รายการ · 8.5pt พอถึง ~50 · เพิ่มหัวข้ออีกต้องวัดใหม่ ไม่ใช่เดา */
-  .sheet.toc .toc-item{font-size:8.5pt;margin:0}
-  .sheet.toc .toc-group{margin:1.1mm 0 0.2mm}
   /* หน้าที่ตารางยาว — ลดความหนาแน่นเฉพาะหน้า ไม่กระทบหน้าอื่น */
   .sheet.dense table{font-size:8.2pt;margin:2mm 0}
   .sheet.dense td,.sheet.dense th{padding:1.2mm 2mm}
@@ -158,7 +160,7 @@
     <div><b>ชื่อเอกสาร</b> คู่มือระบบและผู้ใช้งาน</div>
     <div><b>ขอบเขต</b> ภาพรวมทั้งระบบ (เน้นโมดูล AI)</div>
     <div><b>ประกอบด้วย</b> ภาคผู้ใช้ + ภาคเทคนิค</div>
-    <div><b>เวอร์ชันเอกสาร</b> 1.4</div>
+    <div><b>เวอร์ชันเอกสาร</b> 1.5</div>
     <div><b>วันที่</b> 27 กรกฎาคม 2569</div>
   </div>
   <div class="foot">เฝ้าติดตามหน้างานโรงงานแบบเรียลไทม์ · แดชบอร์ดปรับแต่งได้ · แจ้งเตือนอัตโนมัติ · โหมด LED · ผู้ช่วย AI</div>
@@ -182,46 +184,51 @@
   <div class="toc-item sub"><span class="t">1.6 การแจ้งเตือน</span><span class="dots"></span><span class="pg">10</span></div>
   <div class="toc-item sub"><span class="t">1.7 โหมด LED (จอหน้างาน)</span><span class="dots"></span><span class="pg">11</span></div>
   <div class="toc-item sub"><span class="t">1.8 ผู้ช่วย AI — ถามข้อมูล (Ask&nbsp;Data)</span><span class="dots"></span><span class="pg">12</span></div>
-  <div class="toc-item sub"><span class="t">1.9 ผู้ช่วย AI — แชทสร้างแดชบอร์ด</span><span class="dots"></span><span class="pg">13</span></div>
-  <div class="toc-item sub"><span class="t">1.10 คลิกองค์ประกอบในวิดเจ็ต (Split&nbsp;element)</span><span class="dots"></span><span class="pg">14</span></div>
+  <div class="toc-item sub"><span class="t">1.8 (ต่อ) ถามข้อมูลโรงงานจริง — /ask/nj5</span><span class="dots"></span><span class="pg">13</span></div>
+  <div class="toc-item sub"><span class="t">1.9 ผู้ช่วย AI — แชทสร้างแดชบอร์ด</span><span class="dots"></span><span class="pg">14</span></div>
+  <div class="toc-item sub"><span class="t">1.10 คลิกองค์ประกอบในวิดเจ็ต (Split&nbsp;element)</span><span class="dots"></span><span class="pg">15</span></div>
 
   <div class="toc-group">ภาคที่ 2 — คู่มือเทคนิค</div>
-  <div class="toc-item sub"><span class="t">2.1 สถาปัตยกรรมระบบ</span><span class="dots"></span><span class="pg">16</span></div>
-  <div class="toc-item sub"><span class="t">2.2 การไหลของข้อมูลเรียลไทม์</span><span class="dots"></span><span class="pg">17</span></div>
-  <div class="toc-item sub"><span class="t">2.3 ฐานข้อมูล</span><span class="dots"></span><span class="pg">18</span></div>
-  <div class="toc-item sub"><span class="t">2.4 สถาปัตยกรรมผู้ช่วย AI (แชท)</span><span class="dots"></span><span class="pg">19</span></div>
-  <div class="toc-item sub"><span class="t">2.4 (ต่อ) เจตนา → เครื่องมือ และการให้คะแนน</span><span class="dots"></span><span class="pg">20</span></div>
-  <div class="toc-item sub"><span class="t">2.4 (ต่อ 2) การประกอบ request และ tool-loop</span><span class="dots"></span><span class="pg">21</span></div>
-  <div class="toc-item sub"><span class="t">2.5 รายการเครื่องมือ (Tools) ของ AI</span><span class="dots"></span><span class="pg">22</span></div>
-  <div class="toc-item sub"><span class="t">2.5 (ต่อ) โฟลว์พรีวิวก่อนยืนยัน</span><span class="dots"></span><span class="pg">23</span></div>
-  <div class="toc-item sub"><span class="t">2.6 กลไก Ask Data (NL→SQL→กราฟ)</span><span class="dots"></span><span class="pg">24</span></div>
-  <div class="toc-item sub"><span class="t">2.6 (ต่อ) ชนิดการตอบ และเพดานลองใหม่</span><span class="dots"></span><span class="pg">25</span></div>
-  <div class="toc-item sub"><span class="t">2.6 (ต่อ 2) ทางแยกการตอบ และ loop แก้ SQL</span><span class="dots"></span><span class="pg">26</span></div>
-  <div class="toc-item sub"><span class="t">2.6 (ต่อ 3) ชุดข้อมูลโรงงานจริง — ทะเบียน → normalizer</span><span class="dots"></span><span class="pg">27</span></div>
-  <div class="toc-item sub"><span class="t">2.6 (ต่อ 4) ตัวคอมไพล์ query spec</span><span class="dots"></span><span class="pg">28</span></div>
-  <div class="toc-item sub"><span class="t">2.6 (ต่อ 5) พอร์ตไปโรงงานอื่น — อะไรคงที่</span><span class="dots"></span><span class="pg">29</span></div>
-  <div class="toc-item sub"><span class="t">2.6 (ต่อ 6) เมื่อไรต้องมี view</span><span class="dots"></span><span class="pg">30</span></div>
-  <div class="toc-item sub"><span class="t">2.6 (ต่อ 7) เดินเครื่องหลังพอร์ต</span><span class="dots"></span><span class="pg">31</span></div>
-  <div class="toc-item sub"><span class="t">2.6 (ต่อ 8) ตัวอย่างเดินจริง — โรงงานที่ 2</span><span class="dots"></span><span class="pg">32</span></div>
-  <div class="toc-item sub"><span class="t">2.6 (ต่อ 9) สี่เคสการรับข้อมูล (1) — โรงงานเดิม</span><span class="dots"></span><span class="pg">33</span></div>
-  <div class="toc-item sub"><span class="t">2.6 (ต่อ 10) สี่เคสการรับข้อมูล (2) — โรงงานใหม่</span><span class="dots"></span><span class="pg">34</span></div>
-  <div class="toc-item sub"><span class="t">2.7 การตั้งค่าและการจัดการข้อผิดพลาดของ AI</span><span class="dots"></span><span class="pg">35</span></div>
-  <div class="toc-item sub"><span class="t">2.8 การติดตั้งและการรันระบบ</span><span class="dots"></span><span class="pg">36</span></div>
+  <div class="toc-item sub"><span class="t">2.1 สถาปัตยกรรมระบบ</span><span class="dots"></span><span class="pg">17</span></div>
+  <div class="toc-item sub"><span class="t">2.2 การไหลของข้อมูลเรียลไทม์</span><span class="dots"></span><span class="pg">18</span></div>
+  <div class="toc-item sub"><span class="t">2.3 ฐานข้อมูล</span><span class="dots"></span><span class="pg">19</span></div>
+  <div class="toc-item sub"><span class="t">2.4 สถาปัตยกรรมผู้ช่วย AI (แชท)</span><span class="dots"></span><span class="pg">20</span></div>
+  <div class="toc-item sub"><span class="t">2.4 (ต่อ) เจตนา → เครื่องมือ และการให้คะแนน</span><span class="dots"></span><span class="pg">21</span></div>
+  <div class="toc-item sub"><span class="t">2.4 (ต่อ 2) การประกอบ request และ tool-loop</span><span class="dots"></span><span class="pg">22</span></div>
+  <div class="toc-item sub"><span class="t">2.5 รายการเครื่องมือ (Tools) ของ AI</span><span class="dots"></span><span class="pg">23</span></div>
+  <div class="toc-item sub"><span class="t">2.5 (ต่อ) โฟลว์พรีวิวก่อนยืนยัน</span><span class="dots"></span><span class="pg">24</span></div>
+  <div class="toc-item sub"><span class="t">2.6 กลไก Ask Data (NL→SQL→กราฟ)</span><span class="dots"></span><span class="pg">25</span></div>
+  <div class="toc-item sub"><span class="t">2.6 (ต่อ) ชนิดการตอบ และเพดานลองใหม่</span><span class="dots"></span><span class="pg">26</span></div>
+  <div class="toc-item sub"><span class="t">2.6 (ต่อ 2) ทางแยกการตอบ และ loop แก้ SQL</span><span class="dots"></span><span class="pg">27</span></div>
+  <div class="toc-item sub"><span class="t">2.6 (ต่อ 3) ชุดข้อมูลโรงงานจริง — ทะเบียน → normalizer</span><span class="dots"></span><span class="pg">28</span></div>
+  <div class="toc-item sub"><span class="t">2.6 (ต่อ 4) ตัวคอมไพล์ query spec</span><span class="dots"></span><span class="pg">29</span></div>
+  <div class="toc-item sub"><span class="t">2.6 (ต่อ 5) พอร์ตไปโรงงานอื่น — อะไรคงที่</span><span class="dots"></span><span class="pg">30</span></div>
+  <div class="toc-item sub"><span class="t">2.6 (ต่อ 6) เมื่อไรต้องมี view</span><span class="dots"></span><span class="pg">31</span></div>
+  <div class="toc-item sub"><span class="t">2.6 (ต่อ 7) เดินเครื่องหลังพอร์ต</span><span class="dots"></span><span class="pg">32</span></div>
+  <div class="toc-item sub"><span class="t">2.6 (ต่อ 8) ตัวอย่างเดินจริง — โรงงานที่ 2</span><span class="dots"></span><span class="pg">33</span></div>
+  <div class="toc-item sub"><span class="t">2.6 (ต่อ 9) สี่เคสการรับข้อมูล (1) — โรงงานเดิม</span><span class="dots"></span><span class="pg">34</span></div>
+  <div class="toc-item sub"><span class="t">2.6 (ต่อ 10) สี่เคสการรับข้อมูล (2) — โรงงานใหม่</span><span class="dots"></span><span class="pg">35</span></div>
+  <div class="toc-item sub"><span class="t">2.7 แผนที่ข้อมูลของสองชุด — demo กับ Nongjok5</span><span class="dots"></span><span class="pg">36</span></div>
+  <div class="toc-item sub"><span class="t">2.8 โรงงานและเครื่องใหม่ในอนาคต</span><span class="dots"></span><span class="pg">37</span></div>
+  <div class="toc-item sub"><span class="t">2.9 การตั้งค่าและการจัดการข้อผิดพลาดของ AI</span><span class="dots"></span><span class="pg">38</span></div>
+  <div class="toc-item sub"><span class="t">2.10 การติดตั้งและการรันระบบ</span><span class="dots"></span><span class="pg">39</span></div>
+  <div class="toc-item sub"><span class="t">2.11 การดูแลระบบหลังติดตั้ง</span><span class="dots"></span><span class="pg">40</span></div>
 
   <div class="toc-group">ภาคที่ 3 — การทดสอบและคุณภาพ</div>
-  <div class="toc-item sub"><span class="t">3.1 ประเภทเคสทดสอบและขอบเขต</span><span class="dots"></span><span class="pg">38</span></div>
-  <div class="toc-item sub"><span class="t">3.2 การตรวจสอบความถูกต้อง</span><span class="dots"></span><span class="pg">39</span></div>
-  <div class="toc-item sub"><span class="t">3.2 (ต่อ) แคตตาล็อกเคส /ai + สรุป token</span><span class="dots"></span><span class="pg">40</span></div>
-  <div class="toc-item sub"><span class="t">3.2 (ต่อ 2) /ai — Router eval 32 เคส</span><span class="dots"></span><span class="pg">41</span></div>
-  <div class="toc-item sub"><span class="t">3.2 (ต่อ 3) /ask — 39 เคส (1/2)</span><span class="dots"></span><span class="pg">42</span></div>
-  <div class="toc-item sub"><span class="t">3.2 (ต่อ 4) /ask — 39 เคส (2/2) + ผู้ตรวจ</span><span class="dots"></span><span class="pg">43</span></div>
-  <div class="toc-item sub"><span class="t">3.3 การใช้ Token และโควตา</span><span class="dots"></span><span class="pg">44</span></div>
-  <div class="toc-item sub"><span class="t">3.4 การทดสอบภาระงานและอื่น ๆ</span><span class="dots"></span><span class="pg">45</span></div>
-  <div class="toc-item sub"><span class="t">3.5 ข้อจำกัดปัจจุบันและแนวทางพัฒนา</span><span class="dots"></span><span class="pg">46</span></div>
+  <div class="toc-item sub"><span class="t">3.1 ประเภทเคสทดสอบและขอบเขต</span><span class="dots"></span><span class="pg">42</span></div>
+  <div class="toc-item sub"><span class="t">3.2 การตรวจสอบความถูกต้อง</span><span class="dots"></span><span class="pg">43</span></div>
+  <div class="toc-item sub"><span class="t">3.2 (ต่อ) แคตตาล็อกเคส /ai + สรุป token</span><span class="dots"></span><span class="pg">44</span></div>
+  <div class="toc-item sub"><span class="t">3.2 (ต่อ 2) /ai — Router eval 32 เคส</span><span class="dots"></span><span class="pg">45</span></div>
+  <div class="toc-item sub"><span class="t">3.2 (ต่อ 3) /ask — 39 เคส (1/2)</span><span class="dots"></span><span class="pg">46</span></div>
+  <div class="toc-item sub"><span class="t">3.2 (ต่อ 4) /ask — 39 เคส (2/2) + ผู้ตรวจ</span><span class="dots"></span><span class="pg">47</span></div>
+  <div class="toc-item sub"><span class="t">3.3 การใช้ Token และโควตา</span><span class="dots"></span><span class="pg">48</span></div>
+  <div class="toc-item sub"><span class="t">3.4 การทดสอบภาระงานและอื่น ๆ</span><span class="dots"></span><span class="pg">49</span></div>
+  <div class="toc-item sub"><span class="t">3.5 ข้อจำกัดปัจจุบันและแนวทางพัฒนา</span><span class="dots"></span><span class="pg">50</span></div>
 
   <div class="toc-group">ภาคผนวก</div>
-  <div class="toc-item sub"><span class="t">ก. REST API ที่สำคัญ</span><span class="dots"></span><span class="pg">47</span></div>
-  <div class="toc-item sub"><span class="t">ข. โปรโตคอล WebSocket</span><span class="dots"></span><span class="pg">48</span></div>
+  <div class="toc-item sub"><span class="t">ก. REST API ที่สำคัญ</span><span class="dots"></span><span class="pg">51</span></div>
+  <div class="toc-item sub"><span class="t">ข. โปรโตคอล WebSocket</span><span class="dots"></span><span class="pg">52</span></div>
+  <div class="toc-item sub"><span class="t">ค. อภิธานศัพท์ และประวัติการแก้ไขเอกสาร</span><span class="dots"></span><span class="pg">53</span></div>
   <div class="ftr"><span>สารบัญ</span></div>
 </div>
 
@@ -341,7 +348,7 @@
     <tr><td><b>Count</b></td><td>จำนวนการผลิตแบบแบ่งช่วงเวลา (รายวัน/ชั่วโมง)</td><td>REST รีเฟรชทุก 60 วินาที</td></tr>
     <tr><td><b>Custom Chart</b></td><td>กราฟหลายเมตริกซ้อนกัน (สองแกน หรือปรับให้เป็น 0–100%)</td><td>หลายซีรีส์ + WebSocket</td></tr>
   </table>
-  <div class="note"><b>เครื่องจักรจำลองในระบบ</b> — Checkweigher CW-01 (weight, speed, rejects, throughput) · Temp Sensor TS-01 (temp, humidity, dew_point) · Conveyor Belt CB-01 (speed, load, rpm, vibration) · Vision AI Camera VC-01 (defect_rate, inspected, passed, failed, confidence)</div>
+  <div class="note"><b>เครื่องจักรชุดสาธิต</b> — Checkweigher CW-01 (weight, speed, rejects, throughput) · Temp Sensor TS-01 (temp, humidity, dew_point) · Conveyor Belt CB-01 (speed, load, rpm, vibration) · Vision AI Camera VC-01 (defect_rate, inspected, passed, failed, confidence)</div>
   <p class="indent">เมตริกที่แต่ละวิดเจ็ตใช้มาจาก "สคีมาฟิลด์แบบไดนามิก" ของเครื่องจักร (หัวข้อ 1.5) ทำให้ระบบรองรับเครื่องจักรประเภทใดก็ได้โดยไม่ต้องแก้โค้ด</p>
   <div class="ftr"><span>1.4 ประเภทของวิดเจ็ต</span></div>
 </div>
@@ -379,12 +386,15 @@
 </div>
 
 <!-- ข้อ 1.7 LED -->
-<div class="sheet">
+<div class="sheet sheet-ui">
   <div class="hdr"><span><b>ภาคที่ 1</b> · คู่มือผู้ใช้</span><span>1.7 โหมด LED</span></div>
   <h2 class="sec">1.7 โหมด LED (จอหน้างาน)</h2>
   <p class="meta"><strong>ที่อยู่:</strong> <span class="route">/led</span> (เข้าถึงได้โดยไม่ต้องล็อกอิน)</p>
   <p class="indent">โหมด LED เป็นหน้าจอสำหรับติดตั้งที่หน้างานโรงงาน แสดงผลเต็มจอขนาด 640×320 พิกเซล ไม่มีเมนูหรือส่วนควบคุม เหมาะกับจอ LED ขนาดใหญ่ ข้อมูลอัปเดตต่อเนื่องผ่าน WebSocket โดยไม่ต้องมีผู้ดูแลคอยรีเฟรช</p>
-  <div class="ph">ตัวอย่างจอ LED ต้องสร้างลิงก์ที่มีโทเคนและผังวิดเจ็ต (base64) ก่อน จึงไม่สามารถจับภาพหน้าเปล่าได้<br>(ใช้ปุ่ม “Export LED Link” จากตัวแก้ไขแดชบอร์ดเพื่อสร้างภาพจริง แล้วบันทึกทับไฟล์ images/ui/08-led.png)</div>
+  <figure>
+    <img class="ui-shot" src="images/ui/08-led.jpg" alt="หน้าจอโหมด LED" style="max-height:52mm">
+    <figcaption>ภาพที่ 1.7 — โหมด LED ที่ความละเอียด 640×320 (สปาร์กไลน์ · เกจ · ตัวเลขเดี่ยว · ยอดผลิตรายชั่วโมง · แผงแจ้งเตือน)</figcaption>
+  </figure>
   <h3>การสร้างและเพิกถอนลิงก์</h3>
   <ul>
     <li>ผู้มีสิทธิ์ (admin/editor) สร้างโทเคนถาวร (บทบาท <b>led-viewer</b> ไม่มีวันหมดอายุ) ผ่าน <span class="route">POST /api/led/token</span> เก็บไว้ในคอลัมน์ <span class="route">organizations.led_token</span></li>
@@ -399,7 +409,7 @@
 <div class="sheet sheet-ui">
   <div class="hdr"><span><b>ภาคที่ 1</b> · คู่มือผู้ใช้ · AI</span><span>1.8 ถามข้อมูล</span></div>
   <h2 class="sec">1.8 ผู้ช่วย AI — ถามข้อมูล (Ask Data)</h2>
-  <p class="meta"><strong>ที่อยู่:</strong> <span class="route">/ask</span> (ข้อมูลสาธิต) · <span class="route">/nj5</span> (โรงงานจริง)</p>
+  <p class="meta"><strong>ที่อยู่:</strong> <span class="route">/ask/demo</span> (ข้อมูลสาธิต) · <span class="route">/ask/nj5</span> (โรงงานจริง) — รูปแบบเดียวกันคือ <span class="route">/ask/:scope</span></p>
   <p class="indent">หน้า "ถามข้อมูล" ให้ผู้ใช้พิมพ์คำถามเป็นภาษาธรรมชาติ (ไทยหรืออังกฤษ) แล้วระบบจะสร้างกราฟ ตาราง หรือคำตอบเชิงบรรยายเพื่อตอบคำถามนั้น เหมาะสำหรับการสำรวจข้อมูลอย่างรวดเร็วโดยไม่ต้องสร้างวิดเจ็ตเอง</p>
   <figure>
     <img class="ui-shot" src="images/ui/07-ask-data.png" alt="หน้าถามข้อมูล" style="max-height:42mm">
@@ -421,6 +431,29 @@
   </ul>
   <div class="note"><b>อ่านกราฟให้ถูก</b> — <b>แถบจาง</b> รอบเส้นคือช่วงต่ำสุด–สูงสุดในแต่ละช่วงเวลา เส้นกลางคือค่าเฉลี่ย: ชั่วโมงที่เครื่องวิ่ง −35°C แล้วละลายน้ำแข็งขึ้น +25°C ค่าเฉลี่ยจะออกมาราว +1.6°C ซึ่งเครื่องไม่เคยอยู่ที่ค่านั้นจริง แถบจึงบอกสิ่งที่ค่าเฉลี่ยเดียวซ่อนไว้ · <b>เส้นขาด</b> = ต้นทางไม่ส่งข้อมูลช่วงนั้น ไม่ใช่ค่าศูนย์ · <b>Boards</b> บันทึกกราฟไว้เป็นชุด เปิดใหม่แล้วระบบสร้างคำสั่งขึ้นใหม่จาก "เจตนา" ที่บันทึกไว้ จึงได้ค่าล่าสุดเสมอและไม่พังเมื่อโครงสร้างข้อมูลเปลี่ยน</div>
   <div class="ftr"><span>1.8 ผู้ช่วย AI — ถามข้อมูล (Ask Data)</span></div>
+</div>
+
+<!-- ข้อ 1.8 (ต่อ) Ask Data — โรงงานจริง -->
+<div class="sheet sheet-ui dense">
+  <div class="hdr"><span><b>ภาคที่ 1</b> · คู่มือผู้ใช้ · AI</span><span>1.8 (ต่อ) ถามข้อมูลโรงงานจริง</span></div>
+  <h2 class="sec">1.8 (ต่อ) ถามข้อมูลโรงงานจริง — <span class="route">/ask/nj5</span></h2>
+  <p class="indent">หน้าเดียวกันนี้ตอบได้ทั้งชุดข้อมูลสาธิตและข้อมูลหน้างานจริง สลับด้วยแถบ "DATA" แล้วที่อยู่หน้าเว็บเปลี่ยนตาม — <span class="route">/ask/demo</span> หรือ <span class="route">/ask/nj5</span> จึงบุ๊กมาร์กแยกชุดได้ ตัวเลือกในแถบไม่ได้เขียนตายไว้ในหน้าเว็บ แต่มาจาก <span class="route">GET /ai/scopes</span> ซึ่งไล่จากทะเบียนต้นทาง โรงงานที่ยังไม่ได้ลงทะเบียนจึงไม่ปรากฏให้เลือก <b>แถบนี้คือทางเดียวในการสลับโรงงาน</b> — เมนูด้านซ้ายมีปุ่ม "Ask Data" ปุ่มเดียว ไม่มีปุ่มลัดรายโรงงาน เพราะปุ่มลัดต้องไล่เพิ่มด้วยมือทุกครั้งที่มีโรงงานใหม่ ส่วนแถบ DATA ขึ้นเองจากทะเบียน</p>
+  <figure>
+    <img class="ui-shot" src="images/ui/09-ask-nj5.jpg" alt="หน้าถามข้อมูลของโรงงาน Nongjok5" style="max-height:74mm">
+    <figcaption>ภาพที่ 1.8ก — คำถามภาษาไทยหนึ่งประโยคบนข้อมูลโรงงานจริง ได้กราฟสองแกน (แท่ง = ยอดผลิต, เส้น = อุณหภูมิ evap) · แถบ DATA ด้านบนมีสามตัวเลือกแล้ว (สาธิต · Mahachai · Nongjok5) โดยไม่ได้แก้หน้าเว็บเลย — Mahachai โผล่มาเองหลังลงทะเบียนต้นทาง</figcaption>
+  </figure>
+  <h3>ต่างจากชุดสาธิตตรงไหน</h3>
+  <table>
+    <tr><th style="width:30mm">หัวข้อ</th><th style="width:52mm">ชุดสาธิต (demo)</th><th>โรงงานจริง (Nongjok5)</th></tr>
+    <tr><td><b>ที่อยู่</b></td><td><span class="route">/ask/demo</span></td><td><span class="route">/ask/nj5</span> — <span class="route">nj5</span> คือ slug ของโรงงานในทะเบียน</td></tr>
+    <tr><td><b>ข้อมูลที่อ่าน</b></td><td>เทเลเมทรีชุดสาธิต 2.19 ล้านแถว</td><td>ค่าที่นำเข้าจากตารางของโรงงาน 28.0 ล้านค่า · 189 เส้นข้อมูล</td></tr>
+    <tr><td><b>ช่วงเวลา</b></td><td>ย้อนหลังตามที่ <span class="route">backfill</span> สร้างไว้</td><td>22 ก.ค. 2025 – 23 ก.ค. 2026 (ระบบบอกช่วงนี้ให้โมเดลรู้ทุกคำถาม)</td></tr>
+    <tr><td><b>ใครเขียนคำสั่ง</b></td><td>โมเดลเขียน SQL แล้วผ่านตัวตรวจ</td><td><b>โมเดลไม่เขียน SQL</b> — ระบุแค่ query spec แล้วเซิร์ฟเวอร์คอมไพล์เอง (ดู 2.6 ต่อ 4)</td></tr>
+    <tr><td><b>วิธีรวมค่า</b></td><td>โมเดลเลือกเอง</td><td>มาจาก<b>ชนิดของเมตริก</b>ในทะเบียน ใช้สูตรผิดชนิดไม่ได้</td></tr>
+    <tr><td><b>เครื่องที่ถามได้</b></td><td>เครื่องสาธิต 4 ตัว</td><td>เครื่องจริงในโรงงาน รวมเครื่องที่ระบบพบเองแล้วผู้ดูแลยืนยัน</td></tr>
+  </table>
+  <div class="note"><b>หนึ่งคำถาม = หนึ่งโรงงานเสมอ</b> — ถามข้ามโรงงานในประโยคเดียวไม่ได้โดยตั้งใจ เพราะพรอมป์ตจะโตตามจำนวนโรงงาน · เพิ่มโรงงานที่ 2 แล้วปุ่มใหม่โผล่ในแถบ DATA เองโดยไม่ต้องแก้หน้าเว็บ (ดู 2.8) · คำถามภาษาไทยและอังกฤษใช้ได้เท่ากัน</div>
+  <div class="ftr"><span>1.8 (ต่อ) ถามข้อมูลโรงงานจริง — /ask/nj5</span></div>
 </div>
 
 <!-- ข้อ 1.9 AI Chat -->
@@ -531,7 +564,7 @@ sequenceDiagram
   Note over DB,WS: Broadcaster ตรวจ DB ซ้ำทุก 30s (สำรอง)
     </pre>
   </div>
-  <p class="indent">เครื่องจักรจำลองสร้างข้อมูลทุก 1 วินาที (เดินสุ่มพร้อมจุดผิดปกติเป็นครั้งคราว) ตัวกระจายข้อมูลดึงแถวล่าสุดของแต่ละเครื่อง (DISTINCT ON) แล้วส่งให้ผู้ใช้เป็นจังหวะสำรอง</p>
+  <p class="indent">ตัวกระจายข้อมูลดึงแถวล่าสุดของแต่ละเครื่อง (DISTINCT ON) แล้วส่งให้ผู้ใช้เป็นจังหวะสำรอง ข้อมูลย้อนหลังของชุดสาธิตมาจากคำสั่ง <span class="route">backfill</span> ที่รันครั้งเดียวแล้วจบ ไม่ใช่ตัวป้อนข้อมูลสด</p>
   <div class="note">ประเภทข้อความ WebSocket — ฝั่งไคลเอนต์: <span class="route">subscribe</span> / <span class="route">unsubscribe</span> / <span class="route">ping</span> · ฝั่งเซิร์ฟเวอร์: <span class="route">telemetry</span> / <span class="route">alert</span> / <span class="route">machine_status</span></div>
   <div class="ftr"><span>2.2 การไหลของข้อมูลเรียลไทม์</span></div>
 </div>
@@ -584,7 +617,7 @@ flowchart LR
   CF -->|ไม่| AUTO["โหมดเลือก<br/>เครื่องมืออัตโนมัติ"]
   CF -->|ใช่| GO["Go: dispatchIntent<br/>เจตนา → เครื่องมือ"]
   AUTO --> LOOP
-  GO --> LOOP["วนเรียก Tools<br/>≤ 5 รอบ"]
+  GO --> LOOP["วนเรียก Tools<br/>สูงสุด 2 รอบ"]
   LOOP --> VER["ตรวจสอบคำตอบ<br/>(ดูรายละเอียดหน้าถัดไป)"]
   VER --> OUT["ส่งคำตอบ / พรีวิว"]
     </pre>
@@ -594,7 +627,7 @@ flowchart LR
   <ul>
     <li><b>จำแนกเจตนา</b> — เรียกโมเดล Router ครั้งเดียว หากความเชื่อมั่นต่ำกว่า 0.5 หรือจำแนกไม่ได้ จะกลับไปใช้โหมดเลือกเครื่องมืออัตโนมัติ</li>
     <li><b>ตัดสินด้วย Go</b> — จับคู่เจตนากับเครื่องมือที่ต้องบังคับเรียก (deterministic) เช่น อ่านค่า→<span class="route">show_metric</span>, ผลิต→<span class="route">get_production_count</span></li>
-    <li><b>วนเรียกเครื่องมือ</b> — สูงสุด 5 รอบ เมื่อครบเพดานจะตัดเครื่องมือออกเพื่อบังคับให้สรุปเป็นข้อความ</li>
+    <li><b>วนเรียกเครื่องมือ</b> — สูงสุด 2 รอบ (<span class="route">roundCap</span> = 1) เหลือ 1 รอบเมื่อบังคับเครื่องมือตัวเดียว และ 0 รอบเมื่อตอบจากข้อมูลบนจอ ครบเพดานแล้วตัดเครื่องมือออกเพื่อบังคับให้สรุปเป็นข้อความ · ลูปนอกหยุดตายที่ 5 การเรียกโมเดล</li>
     <li><b>ตรวจสอบแล้วซ่อม</b> — ตรวจเชิงกำหนด (deterministic) และให้โมเดลตรวจคำตอบ ก่อนส่ง/ถามกลับ/ซ่อมหนึ่งรอบ</li>
   </ul>
   <div class="note">ผู้ใช้บทบาท viewer จะไม่ถูกบังคับเรียกเครื่องมือกลุ่มแก้ไข (preview_*) เครื่องมือกลุ่มนี้ต้องเป็น admin หรือ editor เท่านั้น</div>
@@ -830,7 +863,7 @@ flowchart TB
     <li>อ่านต่อจากตำแหน่งเดิมโดย<b>ถอยหลังช่วงหนึ่ง</b> เพื่อรับข้อมูลที่ส่งมาช้า และเขียนแบบไม่ซ้ำคีย์ จึงอ่านซ้ำหรือนำเข้าใหม่ได้ปลอดภัย</li>
     <li>พบชื่อเครื่องที่ไม่รู้จัก → <b>สร้างเครื่องอัตโนมัติ</b> รอผู้ดูแลยืนยัน เครื่องที่โรงงานเพิ่มกลางดึกจึงตอบได้เช้าวันรุ่งขึ้น</li>
   </ul>
-  <div class="note"><b>ธงคุณภาพ</b> — ทุกค่าถูกตั้งธง (0 ปกติ / 1 sentinel / 2 นอกช่วง) แต่<b>เก็บค่าดิบไว้</b> แล้วกรองตอนตอบ ลงทะเบียนผิดก็แก้ทะเบียนแล้วคำนวณใหม่ ไม่ต้องนำเข้าซ้ำ · ต้นทางไหนผิดพลาด บันทึกที่ <span class="route">source_state</span> ของต้นทางนั้น ไม่ทำให้ต้นทางอื่นหยุด · <b>เพิ่มตู้แช่ใหม่ 1 ตู้ = เพิ่ม 8 แถวในทะเบียน</b> ไม่ต้องแก้โปรแกรม ไม่ต้องสร้าง view ใหม่ ไม่ต้องแก้พรอมป์ต · ผลนำเข้าจริงของ Nongjok5: <b>28,049,795 ค่า / 148 เส้นข้อมูล / 11 เครื่อง</b> จากตารางดิบ 21.6 ล้านแถว ใน 12 นาที 46 วินาที</div>
+  <div class="note"><b>ธงคุณภาพ</b> — ทุกค่าถูกตั้งธง (0 ปกติ / 1 sentinel / 2 นอกช่วง) แต่<b>เก็บค่าดิบไว้</b> แล้วกรองตอนตอบ ลงทะเบียนผิดก็แก้ทะเบียนแล้วคำนวณใหม่ ไม่ต้องนำเข้าซ้ำ · ต้นทางไหนผิดพลาด บันทึกที่ <span class="route">source_state</span> ของต้นทางนั้น ไม่ทำให้ต้นทางอื่นหยุด · <b>เพิ่มตู้แช่ใหม่ 1 ตู้ = เพิ่ม 8 แถวในทะเบียน</b> ไม่ต้องแก้โปรแกรม ไม่ต้องสร้าง view ใหม่ ไม่ต้องแก้พรอมป์ต · ผลนำเข้าจริงของ Nongjok5: <b>28,049,795 ค่า / 189 เส้นข้อมูล / 11 เครื่อง</b> จากตารางดิบ 21.6 ล้านแถว ใน 12 นาที 46 วินาที</div>
   <div class="ftr"><span>2.6 (ต่อ 3) ชุดข้อมูลโรงงานจริง — ทะเบียน → normalizer</span></div>
 </div>
 
@@ -1014,7 +1047,7 @@ FROM bn2_tags GROUP BY 1, 2;</pre>
     <tr><td>ถาม "อุณหภูมิโซนเทียบยอดผลิต 7 วัน"</td><td>โมเดลตอบเป็น spec สองเมตริกแบบ timeseries — ไม่ได้เขียน SQL ไม่ได้เลือกสูตร</td></tr>
     <tr><td>สูตรที่เซิร์ฟเวอร์เลือกให้</td><td>counter → ค่าสุดท้ายลบค่าแรก · gauge → เฉลี่ยถ่วงน้ำหนัก · ช่วง 7 วัน → ค่าสรุปรายวัน</td></tr>
   </table>
-  <div class="note"><b>รวมงานทั้งหมด</b> — view 6 บรรทัด · index 1 · แถวทะเบียน 5 แถว · คำสั่งรัน 1 ครั้ง · <b>โค้ด Go 0 · พรอมป์ต 0 · หน้าจอ 0</b> · เทียบของจริง NJ5 ลงทะเบียน 3 ต้นทาง 15 เมตริก ได้ 28,049,795 ค่า / 148 เส้นข้อมูล / 11 เครื่อง จากตารางดิบ 21.6 ล้านแถว ใน 12 นาที 46 วินาที</div>
+  <div class="note"><b>รวมงานทั้งหมด</b> — view 6 บรรทัด · index 1 · แถวทะเบียน 5 แถว · คำสั่งรัน 1 ครั้ง · <b>โค้ด Go 0 · พรอมป์ต 0 · หน้าจอ 0</b> · เทียบของจริง NJ5 ลงทะเบียน 3 ต้นทาง 15 เมตริก ได้ 28,049,795 ค่า / 189 เส้นข้อมูล / 11 เครื่อง จากตารางดิบ 21.6 ล้านแถว ใน 12 นาที 46 วินาที</div>
   <div class="ftr"><span>2.6 (ต่อ 8) ตัวอย่างเดินจริง — โรงงานที่ 2 ส่งข้อมูลมาแถวละหนึ่งเมตริก</span></div>
 </div>
 
@@ -1102,10 +1135,74 @@ FROM bn2_tags GROUP BY 1, 2;</pre>
   <div class="ftr"><span>2.6 (ต่อ 10) สี่เคสของการรับข้อมูลชุดใหม่ (2) — โรงงานใหม่</span></div>
 </div>
 
-<!-- 2.7 AI config & errors -->
+<!-- 2.7 แผนที่ข้อมูลของสองชุด -->
+<div class="sheet sheet-diagram dense dgm-md">
+  <div class="hdr"><span><b>ภาคที่ 2</b> · คู่มือเทคนิค · AI</span><span>2.7 แผนที่ข้อมูลของสองชุด</span></div>
+  <h2 class="sec">2.7 แผนที่ข้อมูลของสองชุด — demo กับ Nongjok5</h2>
+  <p class="indent">หน้า <span class="route">/ask/:scope</span> หน้าเดียวตอบได้สองชุดข้อมูลที่โครงสร้างข้างล่างไม่เหมือนกันเลย ชุดสาธิตเป็นตารางที่ระบบออกแบบเอง ส่วนชุดโรงงานจริงเป็นข้อมูลที่โรงงานส่งมาแล้วถูกแปลงเข้าโครงมาตรฐาน แผนภาพนี้บอกว่าคำถามหนึ่งข้อวิ่งไปแตะตารางไหนบ้าง</p>
+  <div class="diagram">
+    <pre class="mermaid">
+flowchart LR
+  subgraph DEMO["ชุดสาธิต — /ask/demo"]
+    direction LR
+    DT[("telemetry_raw · machines<br/>machine_fields<br/>2.19 ล้านแถว")] --> DV["v_telemetry<br/>v_machines<br/>v_machine_fields"] --> DQ(["ตอบคำถาม"])
+  end
+  subgraph REAL["โรงงานจริง — /ask/nj5"]
+    direction LR
+    REG[("ทะเบียน<br/>source_tables<br/>source_metrics")] --> L[("ตารางดิบ<br/>nj5_machines<br/>nj5_iqf2 · nj5_iqf3")]
+    L -->|"normalizer<br/>ทุก 30 วินาที"| R[("series 189 เส้น<br/>readings 28.0 ล้านค่า")]
+    R --> AGG["สรุปรายชั่วโมง<br/>→ สรุปรายวัน"] --> RV["v_series<br/>v_readings"] --> RQ(["ตอบคำถาม"])
+  end
+    </pre>
+  </div>
+  <table>
+    <tr><th style="width:34mm">หัวข้อ</th><th style="width:50mm">ชุดสาธิต</th><th>โรงงานจริง</th></tr>
+    <tr><td><b>relation ที่อ่านได้</b></td><td><span class="route">v_telemetry</span> · <span class="route">v_machines</span> · <span class="route">v_machine_fields</span></td><td><span class="route">v_series</span> · <span class="route">v_readings</span></td></tr>
+    <tr><td><b>ตารางฐาน</b></td><td>ตารางของระบบเอง เขียนตอนรับข้อมูลผ่าน REST</td><td>ตารางดิบของโรงงาน (ไม่แก้ ไม่ลบ) แล้ว normalizer ระบายเข้า <span class="route">series</span>/<span class="route">readings</span></td></tr>
+    <tr><td><b>เพิ่มเมตริกใหม่</b></td><td>เพิ่มฟิลด์ใน <span class="route">machine_fields</span></td><td>เพิ่มแถวใน <span class="route">source_metrics</span> — ไม่แตะโค้ด ไม่สร้าง view</td></tr>
+    <tr><td><b>ผู้เขียนคำสั่ง</b></td><td>โมเดลเขียน SQL → ตัวตรวจกรอง</td><td>โมเดลส่ง query spec → เซิร์ฟเวอร์คอมไพล์ SQL เอง</td></tr>
+  </table>
+  <div class="note"><b>ห้าตัวนี้คือทั้งหมดที่คำสั่งอัตโนมัติแตะได้</b> ตารางฐานทุกตัว (<span class="route">telemetry_raw</span>, <span class="route">series</span>, <span class="route">readings</span>, ตารางดิบ <span class="route">nj5_*</span>, ทะเบียน, ผู้ใช้, แดชบอร์ด) ถูกปฏิเสธหมด · และรายชื่อนี้<b>ไม่ยาวขึ้น</b>เมื่อเพิ่มโรงงาน</div>
+  <div class="note warn"><b>ทำไมค่าสรุปไม่อยู่ในรายชื่อ</b> — ค่าสรุปรายชั่วโมง/รายวันถูกคำนวณเก็บไว้แยก การบังคับสิทธิ์ระดับแถวที่อยู่บน <span class="route">series</span> จึงกรองไม่ถึง อ่านตรง ๆ อาจข้ามโรงงานได้ คำสั่งที่เซิร์ฟเวอร์คอมไพล์เองใช้ค่าสรุปได้อย่างปลอดภัยเพราะ join <span class="route">v_series</span> เสมอ และไม่ได้ผ่านตัวตรวจตัวเดียวกับ SQL ที่โมเดลเขียน</div>
+  <p class="indent"><b>ขั้นที่ต่างกันจริง ๆ อยู่ฝั่งซ้ายของแผนภาพ</b> — ชุดสาธิตไม่มีขั้นแปลงข้อมูลเลย ส่วนข้อมูลโรงงานต้องผ่านทะเบียนและ normalizer ก่อนจึงกลายเป็นเส้นข้อมูลที่ถามได้ ฝั่งขวาของทั้งสองชุดเหมือนกันคือจบที่ view แล้วตอบคำถาม</p>
+  <div class="ftr"><span>2.7 แผนที่ข้อมูลของสองชุด — demo กับ Nongjok5</span></div>
+</div>
+
+<!-- 2.8 โรงงานและเครื่องใหม่ในอนาคต -->
+<div class="sheet sheet-diagram dense dgm-md">
+  <div class="hdr"><span><b>ภาคที่ 2</b> · คู่มือเทคนิค · AI</span><span>2.8 โรงงานและเครื่องใหม่</span></div>
+  <h2 class="sec">2.8 โรงงานและเครื่องใหม่ในอนาคต — อะไรโต อะไรอยู่นิ่ง</h2>
+  <p class="indent">คำถามที่ตามมาเสมอคือ "ถ้ามีโรงงานที่สอง หรือโรงงานเดิมเพิ่มเครื่อง ต้องแก้อะไรบ้าง" คำตอบคือ<b>ไม่ต้องแก้โปรแกรม</b> สิ่งที่โตคือแถวในทะเบียน ส่วนโค้ด รายชื่อ relation และตัวสร้างพรอมป์ตมีขนาดเท่าเดิมไม่ว่าจะมีกี่โรงงาน</p>
+  <div class="diagram">
+    <pre class="mermaid">
+flowchart LR
+  REG["ทะเบียน — โตเป็นแถว<br/>+1 factories · +1 source_tables<br/>+N source_metrics"]
+  REG -->|"normalizer<br/>ทุก 30 วินาที"| CANON[("series + readings")]
+  NEW["เครื่องที่โรงงานเพิ่มเอง"] -.->|"ระบบสร้างให้ รอยืนยัน"| CANON
+  CANON --> FIX["ส่วนที่ไม่โต — ไม่ต้องแก้โค้ด<br/>relation 5 ตัว · ตัวคอมไพล์ query spec<br/>/ask/:scope · GET /ai/scopes"]
+  FIX --> Q(["ถามเป็นภาษาไทยได้ทันที"])
+    </pre>
+  </div>
+  <h3>สถานะจริงในระบบตอนนี้</h3>
+  <p class="indent">ฐานข้อมูลมีโรงงานอยู่ 5 แห่ง แต่แถบ DATA แสดงให้เลือกแค่ <b>Nongjok5</b> เพราะอีก 4 แห่งยังไม่มีตารางต้นทางที่เปิดใช้งาน — โรงงานจะโผล่ในตัวเลือก<b>ทันทีที่ลงทะเบียนเสร็จ</b> ไม่ต้อง deploy ใหม่ ไม่ต้องรีสตาร์ต</p>
+  <table>
+    <tr><th style="width:44mm">อยากทำอะไร</th><th style="width:34mm">ต้องแก้ที่ไหน</th><th>ต้องแตะโค้ดไหม</th></tr>
+    <tr><td>เพิ่มโรงงานใหม่ (ทรงข้อมูลพอดี)</td><td>3 แถวในทะเบียน + ระบายข้อมูล</td><td>ไม่ — ดู 2.6 (ต่อ 9–10)</td></tr>
+    <tr><td>เพิ่มโรงงานใหม่ (ทรงไม่พอดี)</td><td>ครอบ view ตามกติกา 6 ข้อ แล้วทำเหมือนข้อบน</td><td>ไม่ — ดู 2.6 (ต่อ 6)</td></tr>
+    <tr><td>เพิ่มตู้แช่ / เครื่องในโรงงานเดิม</td><td>เพิ่มแถวใน <span class="route">source_metrics</span> (ตู้แช่ 1 ตู้ = 8 แถว)</td><td>ไม่</td></tr>
+    <tr><td>โรงงานเพิ่มเครื่องโดยไม่บอก</td><td>normalizer สร้างเครื่องให้เอง แล้ว <span class="route">POST /api/admin/machines/:id/confirm</span></td><td>ไม่</td></tr>
+    <tr><td>โรงงานเปลี่ยนสคีมาต้นทาง</td><td>ตรวจด้วย <span class="route">GET /api/admin/sources/drift</span> แล้วแก้ทะเบียน</td><td>ไม่</td></tr>
+  </table>
+  <div class="note"><b>สัญญาณว่ากำลังเดินผิดทาง</b> — ถ้าพบว่าตัวเองกำลังจะเพิ่มชื่อ view ต่อโรงงานเข้าไปในรายชื่อ relation ที่อ่านได้ หรือเขียนเงื่อนไข <span class="route">if</span> ต่อโรงงานในพรอมป์ต แปลว่ากำลังกลับไปทางเดิมที่ทะเบียนถูกสร้างมาเพื่อเลิกใช้</div>
+  <h3>นับแถวจริงของโรงงานที่ 2</h3>
+  <p class="indent">สมมติโรงงานใหม่ส่งมาหนึ่งตาราง มีคอลัมน์ที่อยากถามได้ 6 คอลัมน์ งานทั้งหมดคือ <b>1 แถวใน <span class="route">factories</span> + 1 แถวใน <span class="route">source_tables</span> + 6 แถวใน <span class="route">source_metrics</span> = 8 แถว</b> แล้วสั่ง <span class="route">normalize-backfill</span> หนึ่งครั้ง จากนั้นปุ่มของโรงงานจะโผล่ในแถบ DATA และถามได้ทันที — โค้ดไม่มีบรรทัดไหนเปลี่ยน</p>
+  <div class="ftr"><span>2.8 โรงงานและเครื่องใหม่ในอนาคต — อะไรโต อะไรอยู่นิ่ง</span></div>
+</div>
+
+<!-- 2.9 AI config & errors -->
 <div class="sheet">
-  <div class="hdr"><span><b>ภาคที่ 2</b> · คู่มือเทคนิค · AI</span><span>2.7 การตั้งค่า AI</span></div>
-  <h2 class="sec">2.7 การตั้งค่าและการจัดการข้อผิดพลาดของ AI</h2>
+  <div class="hdr"><span><b>ภาคที่ 2</b> · คู่มือเทคนิค · AI</span><span>2.9 การตั้งค่า AI</span></div>
+  <h2 class="sec">2.9 การตั้งค่าและการจัดการข้อผิดพลาดของ AI</h2>
   <p class="indent">โมดูล AI เชื่อมต่อกับผู้ให้บริการที่เข้ากันได้กับ OpenAI ผ่านจุดเรียกเดียว (<span class="route">callAIModel</span>) กำหนดค่าได้ทั้งหมดผ่านตัวแปรสภาพแวดล้อม โดยแยกโมเดลสำหรับจำแนกเจตนา (Router) ออกจากโมเดลหลัก เพื่อแยกโควตาออกจากกัน</p>
   <h3>ตัวแปรสภาพแวดล้อม</h3>
   <table>
@@ -1125,20 +1222,20 @@ FROM bn2_tags GROUP BY 1, 2;</pre>
     <tr><td>ข้อผิดพลาดอื่นจากผู้ให้บริการ</td><td><b>502 AI_ERROR</b></td></tr>
   </table>
   <div class="note"><b>การแคชพรอมป์ต์</b> — system prompt ถูกรวมเป็นสายอักขระเสถียร (byte-stable) เพื่อให้ผู้ให้บริการแคชได้ วันที่ปัจจุบันถูกย้ายออกไปไว้ในบริบทต่อคำขอ เพื่อไม่ให้ส่วนที่แคชเปลี่ยนไปในแต่ละวัน และชุดสคีมาเครื่องมือมีเพียงสองรูปแบบเสถียรเพื่อคงการแคช</div>
-  <div class="ftr"><span>2.7 การตั้งค่าและการจัดการข้อผิดพลาดของ AI</span></div>
+  <div class="ftr"><span>2.9 การตั้งค่าและการจัดการข้อผิดพลาดของ AI</span></div>
 </div>
 
-<!-- 2.8 install -->
+<!-- 2.10 install -->
 <div class="sheet">
-  <div class="hdr"><span><b>ภาคที่ 2</b> · คู่มือเทคนิค</span><span>2.8 การติดตั้งและการรัน</span></div>
-  <h2 class="sec">2.8 การติดตั้งและการรันระบบ</h2>
+  <div class="hdr"><span><b>ภาคที่ 2</b> · คู่มือเทคนิค</span><span>2.10 การติดตั้งและการรัน</span></div>
+  <h2 class="sec">2.10 การติดตั้งและการรันระบบ</h2>
   <p class="indent">วิธีที่แนะนำคือใช้ Docker Compose ซึ่งจะรันฐานข้อมูล Redis ส่วนหลัง และส่วนหน้าให้ครบในคำสั่งเดียว การย้ายฐานข้อมูล (migration) และข้อมูลตั้งต้น (seed) จะทำงานอัตโนมัติเมื่อส่วนหลังเริ่มทำงาน</p>
   <h3>ขั้นตอน</h3>
   <table>
     <tr><th style="width:70mm">คำสั่ง</th><th>ความหมาย</th></tr>
     <tr><td><span class="route">cp .env.example .env</span></td><td>เตรียมไฟล์ตั้งค่า (กรอก JWT_SECRET ≥ 32 ตัว และ AI_API_KEY)</td></tr>
     <tr><td><span class="route">docker compose up -d</span></td><td>เริ่มบริการทั้งหมด</td></tr>
-    <tr><td><span class="route">docker compose exec backend ./backfill</span></td><td>โหลดข้อมูลย้อนหลัง ~2.3 ล้านแถว (ทางเลือก)</td></tr>
+    <tr><td><span class="route">docker compose exec backend ./backfill</span></td><td>สร้างข้อมูลย้อนหลัง ~2.3 ล้านแถวตามที่ตัวสร้างตั้งเป้า (ผลจริงในฐานปัจจุบัน 2.19 ล้านแถว) — ทางเลือก</td></tr>
   </table>
   <h3>การเข้าถึง</h3>
   <ul>
@@ -1147,7 +1244,40 @@ FROM bn2_tags GROUP BY 1, 2;</pre>
     <li>บัญชีเริ่มต้น: <span class="route">admin@acme-foods.com</span> / <span class="route">Admin@1234</span></li>
   </ul>
   <div class="note">สำหรับการพัฒนาแบบไม่ใช้ Docker: ส่วนหลังรันด้วย <span class="route">go run ./cmd/server/</span> (ต้องมี Postgres 16 + TimescaleDB) ส่วนหน้ารันด้วย <span class="route">npm run dev</span> ที่พอร์ต 5173 และพร็อกซี <span class="route">/api</span> กับ <span class="route">/ws</span> ไปยังพอร์ต 4000</div>
-  <div class="ftr"><span>2.8 การติดตั้งและการรันระบบ</span></div>
+  <div class="ftr"><span>2.10 การติดตั้งและการรันระบบ</span></div>
+</div>
+
+<!-- 2.11 การดูแลระบบหลังติดตั้ง -->
+<div class="sheet dense">
+  <div class="hdr"><span><b>ภาคที่ 2</b> · คู่มือเทคนิค</span><span>2.11 การดูแลระบบ</span></div>
+  <h2 class="sec">2.11 การดูแลระบบหลังติดตั้ง</h2>
+  <p class="indent">งานประจำส่วนใหญ่ทำงานเองตั้งแต่เซิร์ฟเวอร์เริ่มทำงาน หัวข้อนี้แยกให้ชัดว่าอะไร<b>ตั้งไว้แล้ว</b> อะไร<b>ต้องเรียกเอง</b> และอะไรที่<b>ยังไม่ได้ตั้งแต่ควรตั้ง</b></p>
+  <h3>ก. ตั้งไว้แล้ว — ทำงานอัตโนมัติ</h3>
+  <table>
+    <tr><th style="width:44mm">งาน</th><th>ค่าที่ตั้งไว้</th></tr>
+    <tr><td>แบ่งพาร์ทิชันตามเวลา</td><td><span class="route">readings</span> และ <span class="route">telemetry_raw</span> แบ่งก้อนละ 7 วัน · ข้อมูลเก่ากว่า 14 วันถูกบีบอัดเก็บแบบคอลัมน์</td></tr>
+    <tr><td>สรุปรายชั่วโมง</td><td>คำนวณใหม่ทุก 30 นาที ย้อนหลัง 7 วัน เว้นข้อมูลใหม่สุด 30 นาทีไว้รอข้อมูลที่มาช้า ช่วงที่ยังไม่ถูกสรุประบบต่อท้ายด้วยข้อมูลดิบให้เอง คำถามเรื่องชั่วโมงล่าสุดจึงไม่ได้ศูนย์ที่ดูเหมือนเครื่องหยุด</td></tr>
+    <tr><td>สรุปรายวัน</td><td>คำนวณใหม่ทุก 1 ชั่วโมง ย้อนหลัง 30 วัน อ่านต่อจากสรุปรายชั่วโมง ไม่อ่านข้อมูลดิบซ้ำ</td></tr>
+    <tr><td>นำเข้าข้อมูลโรงงาน</td><td>normalizer ระบายทุกต้นทางที่เปิดใช้งานทุก 30 วินาที ต้นทางที่ผิดพลาดบันทึกที่ <span class="route">source_state</span> ของตัวเอง ไม่ทำให้ต้นทางอื่นหยุด</td></tr>
+  </table>
+  <h3>ข. ต้องเรียกเอง</h3>
+  <table>
+    <tr><th style="width:74mm">คำสั่ง</th><th>ใช้เมื่อไร</th></tr>
+    <tr><td><span class="route">docker compose exec backend ./backfill</span></td><td><b>ชุดสาธิตเท่านั้น</b> — เติมเทเลเมทรีย้อนหลังลง <span class="route">telemetry_raw</span></td></tr>
+    <tr><td><span class="route">docker compose exec backend ./normalize-backfill</span></td><td><b>โรงงานจริงเท่านั้น</b> — ระบายทะเบียนเข้าโครงมาตรฐานแล้วคำนวณค่าสรุปทั้งช่วง จำเป็นเพราะรอบอัตโนมัติครอบแค่ 7/30 วันล่าสุด</td></tr>
+    <tr><td><span class="route">GET /api/admin/sources</span> · <span class="route">/drift</span></td><td>ดูสถานะการนำเข้าของแต่ละต้นทาง / ตรวจว่าสคีมาต้นทางเปลี่ยนไปจากที่ลงทะเบียนไว้</td></tr>
+    <tr><td><span class="route">POST /api/admin/machines/:id/confirm</span></td><td>ยืนยันเครื่องที่ normalizer สร้างขึ้นเองเมื่อพบชื่อที่ไม่รู้จัก</td></tr>
+    <tr><td><span class="route">POST</span> / <span class="route">DELETE /api/led/token</span></td><td>หมุนโทเคนจอ LED — ลิงก์เดิมใช้ไม่ได้ทันทีที่เพิกถอน ต้องส่งลิงก์ใหม่ให้จอหน้างาน</td></tr>
+  </table>
+  <h3>ค. ยังไม่ได้ตั้ง — แนะนำให้ตั้ง</h3>
+  <table>
+    <tr><th style="width:30mm">เรื่อง</th><th style="width:26mm">สถานะจริง</th><th>คำสั่งที่แนะนำ</th></tr>
+    <tr><td>อายุข้อมูลดิบ</td><td><b>ไม่มีนโยบายลบ</b> — ข้อมูลอยู่ถาวร</td><td><span class="route">SELECT add_retention_policy('readings', INTERVAL '2 years');</span> ค่าสรุปยังอยู่ต่อ คำถามย้อนหลังไกลจึงยังตอบได้</td></tr>
+    <tr><td>สำรองข้อมูล</td><td><b>ไม่มีสคริปต์ในระบบ</b></td><td><span class="route">docker compose exec -T db pg_dump -U iot_user -Fc iot_dashboard &gt; backup.dump</span> ตั้งเป็นงานประจำวัน และทดสอบกู้คืนจริงหนึ่งครั้ง</td></tr>
+    <tr><td>เฝ้าระวังการนำเข้า</td><td>มีแต่ปลายทางที่ต้องเรียกดูเอง</td><td>แจ้งเตือนเมื่อ <span class="route">source_state.last_error</span> ไม่ว่าง หรือ <span class="route">last_run</span> ค้างเกิน 5 นาที (รอบปกติคือ 30 วินาที)</td></tr>
+  </table>
+  <div class="note warn"><b>บัญชีฐานข้อมูลต้องไม่ใช่ superuser</b> — การแยกข้อมูลระหว่างโรงงานอาศัยสิทธิ์ระดับแถว ซึ่ง superuser ข้ามได้ทุกข้อ ระบบเตือนตอนเริ่มทำงานหากตรวจพบ (ดู 3.5)</div>
+  <div class="ftr"><span>2.11 การดูแลระบบหลังติดตั้ง</span></div>
 </div>
 
 <!-- ==================== CHAPTER 3 ==================== -->
@@ -1232,7 +1362,7 @@ FROM bn2_tags GROUP BY 1, 2;</pre>
     <tr><td>/ask — full-loop (39 เคส)</td><td>39</td><td><b>183,542</b> (วัดจริงต่อเคส 22 ก.ค. 2569 — ~4.7k/เคส เฉลี่ย; ต่ำกว่าประมาณ ~200k)</td></tr>
     <tr><td>ผู้ตรวจ chart + prose</td><td>4 + 4</td><td>รวมอยู่ในต้นทุน /ask</td></tr>
   </table>
-  <div class="note">วัดโทเคนต่อเคส (tokenMeter) ครบทั้ง 3 ชุดแล้ว — ผลเขียนลง <span class="route">llm2viz/router-eval-results.md</span>, <span class="route">ask-fullloop-results.md</span> และ <span class="route">chat-fullloop-results.md</span>. /ask ถูกกว่า /ai chat ต่อเคสมาก (~4.7k เทียบ ~11.4k) เพราะใช้พรอมป์ต์เฉพาะทาง (emitSQL/emitEChart) ไม่ต้องส่ง systemPromptUnified + tool schemas ครบชุดซ้ำทุกรอบเหมือน chat loop</div>
+  <div class="note">วัดโทเคนต่อเคส (tokenMeter) ครบทั้ง 3 ชุดแล้ว — ผลเขียนลง <span class="route">llm2viz/router-eval-results.md</span>, <span class="route">llm2viz/chat-fullloop-results.md</span> และ <span class="route">docs/ask-demo-test-results.md</span>. /ask ถูกกว่า /ai chat ต่อเคสมาก (~4.7k เทียบ ~11.4k) เพราะใช้พรอมป์ต์เฉพาะทาง (emitSQL/emitEChart) ไม่ต้องส่ง systemPromptUnified + tool schemas ครบชุดซ้ำทุกรอบเหมือน chat loop</div>
   <div class="ftr"><span>3.2 (ต่อ) แคตตาล็อกเคส /ai — แชทเต็มลูป และสรุป token</span></div>
 </div>
 
@@ -1367,7 +1497,7 @@ FROM bn2_tags GROUP BY 1, 2;</pre>
     <tr><td>/ai — 1 เทิร์นสนทนา</td><td>~11,400 (57,141 ÷ 5)</td><td><b>~17 เทิร์น/วัน</b></td></tr>
   </table>
   <p class="indent">ตัวเลขนี้เป็นเพดานของ<b>ทั้งองค์กรรวมกัน</b> ไม่ใช่ต่อผู้ใช้ และโควตาก้อนเดียวกันถูกใช้โดยการรันชุดทดสอบด้วย การลดโทเคน ~11% จึงเท่ากับเพิ่มความจุราว 2 เทิร์นต่อวัน หากจะเปิดใช้กับผู้ใช้จำนวนมาก ต้องพิจารณาเพิ่มโควตาหรือเปลี่ยนผู้ให้บริการเป็นลำดับแรก</p>
-  <div class="note warn"><b>โควตาแบบใช้ร่วมต่อตระกูลโมเดล</b> — ผู้ให้บริการ (KKU) ให้โควตา 200,000 โทเคน/วัน แบบ <b>ใช้ร่วมกันต่อตระกูลโมเดล</b> ไม่ใช่ต่อโมเดล การรัน /ask ครบ 39 เคส ใช้ประมาณ 200k (เกือบเต็มโควตาทั้งวัน) และการรันสองชุดใหญ่พร้อมกัน (~260k) จะเกินโควตา</div>
+  <div class="note warn"><b>โควตาแบบใช้ร่วมต่อตระกูลโมเดล</b> — ผู้ให้บริการ (KKU) ให้โควตา 200,000 โทเคน/วัน แบบ <b>ใช้ร่วมกันต่อตระกูลโมเดล</b> ไม่ใช่ต่อโมเดล การรัน /ask ครบ 39 เคส ใช้ 183,542 โทเคน (~92% ของโควตาทั้งวัน) และการรัน /ask กับ /ai chat พร้อมกัน (~241k) จะเกินโควตา</div>
   <h3>แนวทางลดและควบคุมโทเคน</h3>
   <ul>
     <li>แยกโมเดล Router/ผู้ตรวจ (<span class="route">AI_ROUTER_MODEL</span>) ออกจากโมเดลสร้างคำตอบ ไม่ให้การทดสอบเบียดโควตาระบบจริง</li>
@@ -1423,7 +1553,7 @@ FROM bn2_tags GROUP BY 1, 2;</pre>
     <tr><td>ผู้ใช้บทบาท viewer สั่งแก้ไข</td><td><b>จงใจ</b> — เครื่องมือฝั่งเขียนถูกตัดออกที่ฝั่งเซิร์ฟเวอร์</td></tr>
     <tr><td>สั่งตั้งกฎแจ้งเตือน</td><td>ยังไม่มีเครื่องมือสร้าง/แก้กฎ มีเพียงการอ่านเหตุที่เปิดอยู่</td></tr>
     <tr><td>จำบทสนทนาย้อนหลังหลายข้อความ</td><td>จำกัดประวัติไว้ที่ 3 ข้อความล่าสุดเพื่อคุมโทเคน</td></tr>
-    <tr><td>คำสั่งที่ต้องเรียกเครื่องมือต่อกันหลายชั้น</td><td>จำกัดรอบเรียกเครื่องมือที่ 1 รอบ (0 รอบเมื่อตอบจากข้อมูลบนจอ)</td></tr>
+    <tr><td>คำสั่งที่ต้องเรียกเครื่องมือต่อกันหลายชั้น</td><td>จำกัดรอบเรียกเครื่องมือไว้สูงสุด 2 รอบ (0 รอบเมื่อตอบจากข้อมูลบนจอ)</td></tr>
     <tr><td>คลิกองค์ประกอบในหน้าแก้ไขแดชบอร์ด</td><td>เปิดเฉพาะหน้า <span class="route">/ai</span> เลือกได้ 1 องค์ประกอบต่อวิดเจ็ต</td></tr>
   </table>
   <h3>แนวทางพัฒนา</h3>
@@ -1432,7 +1562,7 @@ FROM bn2_tags GROUP BY 1, 2;</pre>
     <li><b>ระยะกลาง</b> — จำบริบทยาวขึ้น, บอกสาเหตุเมื่อกราฟว่างเพราะข้อมูลถูกคัดออก, เครื่องมือจัดการกฎแจ้งเตือนแบบพรีวิวก่อนยืนยัน</li>
     <li><b>ระยะยาว</b> — streaming, ยุบชุดข้อมูลสาธิตเข้าโครงมาตรฐานให้เหลือตัวสร้างพรอมป์ตเดียว, ปรับจูนตัวจำแนกเจตนาจากบันทึกการใช้งานจริง</li>
   </ul>
-  <div class="note warn"><b>จุดบอดที่เหลืออยู่</b> — ยังไม่มีการทดสอบอัตโนมัติฝั่งเบราว์เซอร์ (E2E) การทดสอบครอบคลุมถึงระดับ HTTP handler และฐานข้อมูลจริงเท่านั้น</div>
+  <div class="note warn"><b>จุดบอดที่เหลืออยู่</b> — ยังไม่มีการทดสอบอัตโนมัติฝั่งเบราว์เซอร์ (E2E) ครอบคลุมแค่ระดับ HTTP handler และฐานข้อมูลจริง</div>
   <div class="ftr"><span>3.5 ข้อจำกัดปัจจุบันและแนวทางพัฒนา</span></div>
 </div>
 
@@ -1467,7 +1597,7 @@ FROM bn2_tags GROUP BY 1, 2;</pre>
 </div>
 
 <!-- ภาคผนวก ข -->
-<div class="sheet sheet-last">
+<div class="sheet">
   <div class="hdr"><span><b>ภาคผนวก</b></span><span>ข. WebSocket</span></div>
   <h2 class="sec">ภาคผนวก ข — โปรโตคอล WebSocket</h2>
   <p class="indent">การเชื่อมต่อแบบเรียลไทม์ใช้ WebSocket ที่เส้นทาง <span class="route">/ws</span> บนพอร์ตเดียวกับ REST (4000) ยืนยันตัวตนผ่านพารามิเตอร์ <span class="route">?token=&lt;jwt&gt;</span></p>
@@ -1487,8 +1617,38 @@ FROM bn2_tags GROUP BY 1, 2;</pre>
   </table>
   <div class="note">ฝั่งเซิร์ฟเวอร์ส่ง ping ทุก 30 วินาที และตั้งกำหนดเวลา pong 60 วินาที เพื่อตรวจจับการเชื่อมต่อที่ขาด แต่ละไคลเอนต์มีคิวส่งข้อมูลแบบบัฟเฟอร์เพื่อไม่ให้บล็อกกัน</div>
 
-  <p class="fig-caption" style="margin-top:8mm">— จบเอกสาร · IotVision คู่มือระบบและผู้ใช้งาน เวอร์ชัน 1.4 —</p>
   <div class="ftr"><span>ภาคผนวก ข — โปรโตคอล WebSocket</span></div>
+</div>
+
+<!-- ภาคผนวก ค -->
+<div class="sheet sheet-last dense">
+  <div class="hdr"><span><b>ภาคผนวก</b></span><span>ค. อภิธานศัพท์</span></div>
+  <h2 class="sec">ภาคผนวก ค — อภิธานศัพท์ และประวัติการแก้ไข</h2>
+  <p class="indent">คำศัพท์ที่ใช้ในเอกสารนี้ เรียงตามลำดับที่พบในเนื้อหา คำอังกฤษที่ไม่มีคำแปลไทยใช้กันแพร่หลายจะคงคำเดิมไว้</p>
+  <table>
+    <tr><th style="width:44mm">คำศัพท์</th><th>ความหมายในบริบทของระบบนี้</th></tr>
+    <tr><td><b>hypertable</b> ·<br><b>ค่าสรุปต่อเนื่อง</b></td><td>hypertable คือตารางของ TimescaleDB ที่แบ่งก้อนตามเวลาเอง (ก้อนละ 7 วัน) · ค่าสรุปต่อเนื่อง (continuous aggregate) คือตารางสรุปที่ฐานข้อมูลคำนวณเพิ่มให้เองเป็นรอบ ระบบนี้มีสองชั้น รายชั่วโมงและรายวัน</td></tr>
+    <tr><td><b>rollup</b> · <b>bucket</b></td><td>rollup คือค่าสรุปรายชั่วโมง/รายวันที่คำถามช่วงกว้างอ่านแทนข้อมูลดิบ · bucket คือความละเอียดที่ข้อมูลถูกยุบเป็นจุดเดียวบนกราฟ เซิร์ฟเวอร์เลือกให้เองตามช่วงที่ถาม</td></tr>
+    <tr><td><b>ตารางดิบ</b> (landing table)</td><td>ตารางที่รับข้อมูลจากโรงงานมาตรง ๆ ตามรูปแบบที่โรงงานส่ง ระบบไม่แก้และไม่ลบ</td></tr>
+    <tr><td><b>โครงมาตรฐาน</b><br>(canonical model)</td><td>โครงเก็บข้อมูลกลางที่ทุกโรงงานถูกแปลงเข้ามา — <span class="route">series</span> คือนิยาม<b>เส้นข้อมูล</b> (หนึ่งเมตริกของหนึ่งเครื่องพร้อมป้ายกำกับ) และ <span class="route">readings</span> คือค่าตามเวลา</td></tr>
+    <tr><td><b>ทะเบียนต้นทาง</b><br>(source registry)</td><td>ตารางที่เก็บ "วิธีอ่าน" ข้อมูลของแต่ละโรงงานเป็นข้อมูล ไม่ใช่โค้ด — เพิ่มโรงงานคือเพิ่มแถว</td></tr>
+    <tr><td><b>normalizer</b> · <b>drift</b></td><td>normalizer คือตัวแปลงข้อมูลที่อ่านทะเบียนแล้วระบายตารางดิบเข้าโครงมาตรฐานทุก 30 วินาที · drift คืออาการที่สคีมาต้นทางเปลี่ยนไปจากที่ลงทะเบียนไว้</td></tr>
+    <tr><td><b>sentinel</b> · <b>ธงคุณภาพ</b></td><td>sentinel คือค่าที่ต้นทางใช้แทน "ไม่มีค่า" เช่น −999 · ทุกค่าถูกตั้งธงกำกับ (0 ปกติ · 1 sentinel · 2 นอกช่วงที่ยอมรับ) แล้วกรองตอนตอบ แต่ยังเก็บค่าดิบไว้</td></tr>
+    <tr><td><b>ชนิดของเมตริก</b></td><td>counter (ตัวนับสะสม) · gauge (ค่า ณ ขณะนั้น) · event · state — เป็นตัวกำหนดสูตรรวมค่าที่เซิร์ฟเวอร์ใช้</td></tr>
+    <tr><td><b>สิทธิ์ระดับแถว</b> (RLS)</td><td>กลไกของฐานข้อมูลที่กรองแถวตามโรงงานที่กำลังถาม ตั้งบน <span class="route">series</span> และไม่คืนข้อมูลเลยเมื่อไม่ได้ระบุโรงงาน</td></tr>
+    <tr><td><b>query spec</b></td><td>คำบอกเจตนาแบบมีโครงสร้างที่โมเดลส่งกลับมาแทน SQL — ระบุเมตริก เครื่อง ป้ายกำกับ ช่วงเวลา แล้วเซิร์ฟเวอร์คอมไพล์ SQL เอง</td></tr>
+    <tr><td><b>Router</b> · <b>ผู้ตรวจ</b> ·<br><b>tool-loop</b></td><td>Router คือโมเดลตัวเล็กที่ตัดสินว่าคำถามควรไปทางไหนก่อนเรียกโมเดลหลัก · ผู้ตรวจ (judge) คือการให้โมเดลตรวจคำตอบตามเกณฑ์ ใช้ในชุดทดสอบ · tool-loop คือรอบที่โมเดลเรียกเครื่องมือแล้วตอบ จำกัดไว้สูงสุด 2 รอบ</td></tr>
+    <tr><td><b>โทเคน</b> · <b>JWT</b></td><td>โทเคน (token) คือหน่วยนับข้อความที่ผู้ให้บริการ AI คิดค่าใช้จ่ายและจำกัดโควตา รวมส่วนที่โมเดลคิดในใจ · JWT คือโทเคนยืนยันตัวตนที่ลงลายเซ็นไว้ ใช้ทั้ง REST และ WebSocket</td></tr>
+    <tr><td><b>สปาร์กไลน์</b> · <b>โหมดจอหน้างาน</b></td><td>สปาร์กไลน์คือกราฟเส้นเล็กไม่มีแกนสำหรับดูแนวโน้ม · โหมดจอหน้างาน (kiosk) คือหน้าที่แสดงผลอย่างเดียว ไม่มีเมนู ไม่ต้องล็อกอิน</td></tr>
+    <tr><td><b>backfill</b> vs<br><b>normalize-backfill</b></td><td>คนละเครื่องมือ ไม่เกี่ยวกัน — ตัวแรกเติมข้อมูลสาธิต ตัวหลังระบายข้อมูลโรงงานจริงจากทะเบียนเข้าโครงมาตรฐาน</td></tr>
+  </table>
+  <h3>ประวัติการแก้ไขเอกสาร</h3>
+  <table>
+    <tr><th style="width:20mm">เวอร์ชัน</th><th style="width:26mm">วันที่</th><th>สาระที่แก้</th></tr>
+    <tr><td><b>1.5</b></td><td>27 ก.ค. 2569</td><td>เพิ่มภาพจอ LED (1.7) และหน้าถามข้อมูลโรงงานจริง (1.8 ต่อ) · เพิ่มแผนที่ข้อมูลสองชุด (2.7) และการรองรับโรงงาน/เครื่องใหม่ (2.8) · เพิ่มการดูแลระบบหลังติดตั้ง (2.11) · เพิ่มอภิธานศัพท์ · แก้ที่อยู่หน้าถามข้อมูลเป็น <span class="route">/ask/:scope</span></td></tr>
+  </table>
+  <p class="fig-caption" style="margin-top:4mm">— จบเอกสาร · IotVision คู่มือระบบและผู้ใช้งาน เวอร์ชัน 1.5 —</p>
+  <div class="ftr"><span>ภาคผนวก ค — อภิธานศัพท์ และประวัติการแก้ไข</span></div>
 </div>
 
 <div id="hint">กำลังเรนเดอร์แผนภาพ… เมื่อครบแล้วจึงกด Ctrl+P (A4, ขอบ 0, เปิด Background graphics)</div>

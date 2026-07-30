@@ -21,12 +21,14 @@ const navItems = [
   { to: '/machines',    icon: MonitorSpeaker,    label: 'Machines' },
   { to: '/alerts',      icon: Bell,              label: 'Alerts', badge: true },
   { to: '/ai',          icon: Bot,               label: 'AI Assistant' },
+  // One entry for Ask Data, not one per plant: the page's own DATA bar is built from
+  // GET /ai/scopes, so plant #3 appears there by registering. A per-plant shortcut here
+  // would have to be added by hand every time — and was, for NJ5, until MHC arrived.
   { to: '/ask/demo',    icon: Sparkles,          label: 'Ask Data' },
-  { to: '/ask/nj5',     icon: Factory,           label: 'NJ5' },
 ];
 
 // Exact-or-child, not a bare prefix: /dashboards must still light up on /dashboards/:id,
-// but /ask/demo must NOT light up on /ask/nj5.
+// while /ask/demo must NOT light up on a plant scope like /ask/mhc.
 const isActive = (path: string) => route.path === path || route.path.startsWith(path + '/');
 const alertCount = computed(() => alertStore.openCount);
 const memberOrgs = computed(() => auth.organizations.filter(o => o.isMember));

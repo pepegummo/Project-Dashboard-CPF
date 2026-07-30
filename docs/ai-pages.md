@@ -29,6 +29,8 @@ IotVision ships two independent AI surfaces, both backed by an OpenAI-compatible
 
 **In short:** IotVision's AI capability is split into two surfaces that share the same AI provider account and org-scoped database access but do not share code paths, conversation state, or UI.
 
+> For the one-picture map of the whole route — an upstream database through the registry and normalizer into the canonical model, then out through this pipeline as a chart — see [`llm2viz-flow.md`](llm2viz-flow.md) (Thai).
+
 | Surface | Page | Backend | Purpose |
 |---|---|---|---|
 | Ask-Data ("Ask" page) | `frontend/src/pages/AskDataPage.vue` | `backend/internal/modules/ai/nl2sql.go`, `catalog.go`, `queryspec.go`, `compiler.go`, `boards.go` | Natural language → rows → LLM-authored ECharts option; boards to save charts; follow-up thread. |
@@ -116,7 +118,7 @@ flowchart TB
 | `prev` | Previous-turn context passed back to the backend for follow-ups (`{question, sql, spec?, clarification?, windowHours?}`). |
 | `scope` / `scopes[]` | Which dataset the page asks against, and the list offered by `GET /ai/scopes`. |
 
-**Scope and the URL.** `scope` is `{dataset, factoryId, slug, label}`, and it lives in the URL: one route `/ask/:scope` covers every dataset. `demo` is the mock telemetry; anything else is a plant, matched against `factories.slug` (`/ask/nj5`) or its uuid for a factory with no slug. Bare `/ask` redirects to `/ask/demo`. The param is only a name — `loadScopes()` resolves it to the real `factoryId` and label from `GET /ai/scopes`, so a canonical scope is briefly unresolved on mount and the `ready` computed disables Ask until it isn't. An unknown slug, or a factory with no registered sources, falls back to the first available scope **through `switchScope`**, so the address bar is corrected too. `switchScope(next)` clears everything on screen (different machines, different metrics, and a spec compiled for another factory) **and navigates**: `router.replace` to `/ask/<slug|uuid|demo>`. The sidebar and top bar read the route, not page state, so leaving `/ask/nj5` in the address bar while showing demo data would highlight the wrong nav item and bookmark a lie. Nothing about a specific plant is hardcoded in the frontend: the slug is seeded by `scripts/nj5-registry.sql`, so plant #2 gets its own URL by registering, not by a frontend change.
+**Scope and the URL.** `scope` is `{dataset, factoryId, slug, label}`, and it lives in the URL: one route `/ask/:scope` covers every dataset. `demo` is the mock telemetry; anything else is a plant, matched against `factories.slug` (`/ask/nj5`) or its uuid for a factory with no slug. Bare `/ask` redirects to `/ask/demo`. The param is only a name — `loadScopes()` resolves it to the real `factoryId` and label from `GET /ai/scopes`, so a canonical scope is briefly unresolved on mount and the `ready` computed disables Ask until it isn't. An unknown slug, or a factory with no registered sources, falls back to the first available scope **through `switchScope`**, so the address bar is corrected too. `switchScope(next)` clears everything on screen (different machines, different metrics, and a spec compiled for another factory) **and navigates**: `router.replace` to `/ask/<slug|uuid|demo>`. The sidebar and top bar read the route, not page state, so leaving `/ask/nj5` in the address bar while showing demo data would highlight the wrong nav item and bookmark a lie. **Switching plants is the DATA bar's job alone** — the sidebar carries one `Ask Data` entry and no per-plant shortcuts. It used to have an `NJ5` one; standing up plant #2 (Mahachai, `scripts/mhc-registry.sql`) is what showed why that does not scale — a shortcut has to be hand-added per plant, while the DATA bar renders straight from `GET /ai/scopes` and grew a third pill on its own. Nothing about a specific plant is hardcoded in the frontend: the slug is seeded by the registry script, so plant #2 gets its own URL by registering, not by a frontend change.
 
 **`ask()`** (`AskDataPage.vue:~262`) trims the input, calls `api.askData(q, prev, scope.dataset, scope.factoryId)`, and branches on the response shape:
 
@@ -188,7 +190,7 @@ sequenceDiagram
   participant DB as TimescaleDB
 
   FE->>API: POST /ai/ask {question, dataset, factoryId, context?:{question, sql, spec, clarification}}
-  API->>API: schemaFor (nl2sql.go:363) — buildSchemaContext (:294) or catalog.promptContext (catalog.go:243)
+  API->>API: schemaFor (nl2sql.go:363) — buildSchemaContext (:294) or catalog.promptContext (catalog.go:244)
 
   loop emission + execution, up to 3 attempts (sqlFixup self-correction)
     alt dataset = canonical
@@ -309,7 +311,7 @@ Both take the same watermark/overlap path and write idempotently, so the CLI is 
 
 **Rollup ladder.** `readings_1h` aggregates raw readings where `quality = 0`; `readings_1d` is a hierarchical continuous aggregate over `readings_1h`. Both store `sum_v, n, min_v, max_v, first_v, last_v` — **not** `avg`, because an average of hourly averages is wrong whenever buckets hold different numbers of readings; `sum_v/n` gives the exact weighted mean at any level. There is deliberately no 1-minute rollup (readings already arrive about once a minute, so it would have as many rows as the raw table); narrow windows read raw.
 
-**Catalog → prompt** (`catalog.go`). `loadCatalog(ctx, factoryID)` (`catalog.go:83`) reads the registry joined with the series that actually exist; `promptContext()` (`catalog.go:243`) renders it. The cache is keyed by a version stamp (`max(updated_at)` + row counts, `catalogVersion` `catalog.go:189`), so a steady system produces byte-identical prompts (provider cache stays warm) and registering a metric invalidates it by itself. Prompt size grows with the number of *metric kinds*, not machines: metrics are described once per `machine_type`, the machine list caps at 24 and label values at 30 (beyond that the model is told to ask the catalog with `shape=list`), and one question is scoped to one factory — so ten plants cost the same prompt as one.
+**Catalog → prompt** (`catalog.go`). `loadCatalog(ctx, factoryID)` (`catalog.go:83`) reads the registry joined with the series that actually exist; `promptContext()` (`catalog.go:244`) renders it. The cache is keyed by a version stamp (`max(updated_at)` + row counts, `catalogVersion` `catalog.go:189`), so a steady system produces byte-identical prompts (provider cache stays warm) and registering a metric invalidates it by itself. Prompt size grows with the number of *metric kinds*, not machines: metrics are described once per `machine_type`, the machine list caps at 24 and label values at 30 (beyond that the model is told to ask the catalog with `shape=list`), and one question is scoped to one factory — so ten plants cost the same prompt as one.
 
 **Compiler** (`compiler.go`). `aggSQL(kind, tier, agg, filter)` (`compiler.go:110`) is the single place a metric kind becomes SQL:
 
@@ -437,7 +439,7 @@ Model-call budget per turn (all inside the handler's 200s context; per-call cap 
 
 | Stage | Ask-Data | Chat Assistant |
 |---|---|---|
-| Retry-on-error loop | Self-correction loop, up to 3 attempts total (`validateSQL`/compile/Postgres error → `sqlFixup` → re-emit via `emitSQL` or `emitSpec`) | Tool loop, max 5 iterations bounded by `roundCap` |
+| Retry-on-error loop | Self-correction loop, up to 3 attempts total (`validateSQL`/compile/Postgres error → `sqlFixup` → re-emit via `emitSQL` or `emitSpec`) | Tool loop — `roundCap` 1 ⇒ up to **2 tool rounds** (1 when a single function is forced, 0 when a focused widget shipped its data); the loop's hard stop is 5 model calls |
 | Secondary generation retry | Chart authoring (`emitEChart`) retries once, passing the prior error back to the model | — |
 | Deterministic checks | — | `runDeterministicChecks` (`verify.go`) — for `preview_add_widget` and `preview_update_widget`, the new metric/fields must exist on the target machine (`checkFieldsExist` against `machine_fields`); for `preview_dashboard`, every planned widget must carry a metric. Any check it can't resolve (no machine on hand, empty lookup) is skipped, never failed. Plus `checkMultiTargetCoverage` — when the router flagged `multiTarget`, fewer than two `preview_update_widget` calls means the turn edited only part of what was asked (first pass only; the post-repair re-check deliberately skips it so a text-only repair isn't trapped in ask-back). |
 | LLM judge | `verify_answer` via `verifyAskAnswer` (chart + table turns; empty results skipped; user-specified chart types never judged) and `verifyAskProse` (prose turns — topicality + rows-contradiction), both `gpt-5.4-mini`, 6s bound | `VerifyAnswer` judge |
@@ -474,28 +476,28 @@ and injects a focused widget's on-screen data so a read is answerable with no to
 
 ### 4.2 Backend
 
-Entry point `Chat` (`controller.go:345`).
+Entry point `Chat` (`controller.go:384`).
 
 ```mermaid
 sequenceDiagram
   participant FE as ChatBox.vue / AIAssistantPage.vue
-  participant API as Chat (controller.go:345)
-  participant Router as ClassifyIntent (router.go:93)
+  participant API as Chat (controller.go:384)
+  participant Router as ClassifyIntent (router.go:105)
   participant Groq as AI provider (KKU)
   participant Tools as ToolKit / DashboardAction
 
   FE->>API: POST /ai/chat {conversationId, message, context}
-  API->>API: persist user message — buildAIMessages caps history to last 3 rows (controller.go:1112)
+  API->>API: persist user message — buildAIMessages caps history to last 3 rows (controller.go:1317)
   API->>Router: ClassifyIntent — forced classify_intent call, gpt-5.4-mini
   Router-->>API: IntentResult {intent, machine, metric, fields, bucket, dateRange, targetWidget, multiTarget, status, sku, confidence}
   Note over Router: confidence floor 0.5 — classification failure -> ok=false
-  API->>API: dispatchIntent(res, ok, focused, ...) -> (tool_choice, roundCap) (controller.go:1032)
+  API->>API: dispatchIntent(res, ok, focused, ...) -> (tool_choice, roundCap) (controller.go:1231)
 
   loop max 5 iterations, roundCap tool rounds, then tools dropped to force text
-    API->>Groq: callAI(msgs, tools, tool_choice) (callAIModel, controller.go:834)
+    API->>Groq: callAI(msgs, tools, tool_choice) (callAIModel, controller.go:972)
     alt finish_reason == tool_calls
       Groq-->>API: tool_calls
-      API->>Tools: runToolRound (controller.go:539) -> ctrl.dispatch (controller.go:153), role-gated
+      API->>Tools: runToolRound (controller.go:601) -> ctrl.dispatch (controller.go:192), role-gated
       Tools-->>API: tool result(s), appended + persisted
     else text response
       Groq-->>API: final assistant text
@@ -504,7 +506,7 @@ sequenceDiagram
 
   opt at least one tool ran
     API->>API: runDeterministicChecks (verify.go)
-    API->>Groq: VerifyAnswer judge (verifyAndMaybeRepair, controller.go:596)
+    API->>Groq: VerifyAnswer judge (verifyAndMaybeRepair, controller.go:658)
     alt mismatch
       API->>API: deliver / askback / runRepairRound (one repair)
     end
@@ -515,10 +517,10 @@ sequenceDiagram
 
 Numbered walkthrough:
 
-1. Persist the user message; history is capped to the last 3 user/assistant rows (`buildAIMessages`, `controller.go:1112`).
+1. Persist the user message; history is capped to the last 3 user/assistant rows (`buildAIMessages`, `controller.go:1317`).
 2. The outgoing message list is `systemPromptUnified` (a large provider-cached prompt) + capped history + an authoritative context block containing dashboard state and today's date.
-3. **Intent router** (`router.go`): `ClassifyIntent` (`router.go:93`) makes one forced `classify_intent` call on the router model (`gpt-5.4-mini` — bake-off 29/32 on the 32-case intent suite, 2026-07-17), returning strict JSON `IntentResult{intent, machine, metric, fields, bucket, dateRange, targetWidget, status, sku, confidence}`. Recognized intents: `chat`, `read_metric`, `read_agg`, `edit_widget`, `compare`, `create_dashboard`, `alerts`, `production`. `confidence` is **self-reported by the model** (0..1, per a 3-band rubric in `routerSystemPrompt` — 0.85+ unambiguous, 0.5–0.85 loose wording, below 0.5 genuinely ambiguous); it is not a logprob or a calibrated probability. A confidence floor of 0.5 applies (`parseIntentResult`, `router.go`); below it — or on any classification failure — `ok=false` and the caller falls back to auto tool selection. Design law: **the model classifies, Go decides.**
-4. `dispatchIntent(res, ok, focused, inlineData, role, machineValid, chartExists)` (`controller.go:1032`) is a pure Go function that maps the classified intent to a `(tool_choice, roundCap)` pair — no LLM call is involved in this decision.
+3. **Intent router** (`router.go`): `ClassifyIntent` (`router.go:105`) makes one forced `classify_intent` call on the router model (`gpt-5.4-mini` — bake-off 29/32 on the 32-case intent suite, 2026-07-17), returning strict JSON `IntentResult{intent, machine, metric, fields, bucket, dateRange, targetWidget, multiTarget, status, sku, confidence}`. Recognized intents: `chat`, `read_metric`, `read_agg`, `edit_widget`, `compare`, `create_dashboard`, `alerts`, `production`. `confidence` is **self-reported by the model** (0..1, per a 3-band rubric in `routerSystemPrompt` — 0.85+ unambiguous, 0.5–0.85 loose wording, below 0.5 genuinely ambiguous); it is not a logprob or a calibrated probability. A confidence floor of 0.5 applies (`parseIntentResult`, `router.go`); below it — or on any classification failure — `ok=false` and the caller falls back to auto tool selection. Design law: **the model classifies, Go decides.**
+4. `dispatchIntent(res, ok, focused, inlineData, role, machineValid, chartExists)` (`controller.go:1231`) is a pure Go function that maps the classified intent to a `(tool_choice, roundCap)` pair — no LLM call is involved in this decision.
 
 | Intent | Forced tool_choice |
 |---|---|
@@ -532,13 +534,13 @@ Numbered walkthrough:
 | focused read/chat with inline data | `tool_choice: "none"` — answered from injected context, no tool call. Fires for any read/chat intent (`readOnlyIntents`: `chat`/`read_metric`/`read_agg`/`production`/`alerts`) when a focused widget shipped its on-screen data. This also rescues a router miss: a focused `daily-count`/`alarm-panel` that the router mislabels `chat` still answers correctly from context, so the classification error is cosmetic. |
 | classification failed | `""` (auto — model chooses) |
 
-5. **Tool loop:** up to 5 iterations total, chained across `roundCap` rounds. `callAI(msgs, tools, tc)` is called each iteration; when `finish_reason == "tool_calls"`, `runToolRound` (`controller.go:539`) dispatches through `ctrl.dispatch` (`controller.go:153`) (role-gated), and the tool results are appended to the message list and persisted. Once `roundCap` tool rounds are used, tools are dropped from the next call to force a final text summary.
-6. **Verify-then-repair:** `verifyAndMaybeRepair` (`controller.go:596`) runs only when at least one tool executed. Deterministic checks (`runDeterministicChecks` in `verify.go`) run first — they validate that any metric/fields introduced by `preview_add_widget`/`preview_update_widget` exist on the target machine, that a `preview_dashboard` plan has no metric-less widgets, and that a `multiTarget` turn actually edited more than one widget — followed by an LLM `VerifyAnswer` judge. A failed deterministic check skips the judge entirely and goes straight to repair, so the common failures cost no extra tokens. The outcome is deliver, ask back, or one repair round (`runRepairRound`).
+5. **Tool loop:** up to 5 iterations total, chained across `roundCap` rounds. `callAI(msgs, tools, tc)` is called each iteration; when `finish_reason == "tool_calls"`, `runToolRound` (`controller.go:601`) dispatches through `ctrl.dispatch` (`controller.go:192`) (role-gated), and the tool results are appended to the message list and persisted. Once `roundCap` tool rounds are used, tools are dropped from the next call to force a final text summary.
+6. **Verify-then-repair:** `verifyAndMaybeRepair` (`controller.go:658`) runs only when at least one tool executed. Deterministic checks (`runDeterministicChecks` in `verify.go`) run first — they validate that any metric/fields introduced by `preview_add_widget`/`preview_update_widget` exist on the target machine, that a `preview_dashboard` plan has no metric-less widgets, and that a `multiTarget` turn actually edited more than one widget — followed by an LLM `VerifyAnswer` judge. A failed deterministic check skips the judge entirely and goes straight to repair, so the common failures cost no extra tokens. The outcome is deliver, ask back, or one repair round (`runRepairRound`).
 7. **Response:** `{success, data: newMessages, intent}`.
 
 ### 4.3 Tools
 
-`schema.go`'s `AllTools()` (`schema.go:258`) exposes: `get_machines`, `show_metric`, `get_telemetry_trend`, `get_active_alerts`, `get_telemetry_series`, `get_production_count`, `get_skus`, `list_dashboards`, `preview_dashboard`, `preview_add_widget`, `preview_remove_widget`, `preview_update_widget`.
+`schema.go`'s `AllTools()` (`schema.go:259`) exposes: `get_machines`, `show_metric`, `get_telemetry_trend`, `get_active_alerts`, `get_telemetry_series`, `get_production_count`, `get_skus`, `list_dashboards`, `preview_dashboard`, `preview_add_widget`, `preview_remove_widget`, `preview_update_widget`.
 
 `create_custom_dashboard` is deliberately **excluded** from `AllTools()` — only the frontend calls it, via `POST /ai/tools/execute`, and only after the user clicks Confirm on a staged preview. This enforces the preview-then-confirm workflow: the model can never create a dashboard directly, it can only stage one.
 
@@ -550,7 +552,7 @@ Token budget (2026-07-20): every call carries `max_completion_tokens` (`AI_MAX_T
 
 **Capacity, derived from the measured suites:** /ask averages ~4,700 tokens per question (183,542 ÷ 39, 2026-07-22) and /ai ~11,400 tokens per turn (57,141 ÷ 5, 2026-07-21). Against KKU's 200k tokens/day — shared across the whole org, and shared with test runs — that is roughly **42 /ask questions or 17 /ai turns per day**. The 11% reduction above bought ~2 extra chat turns per day. One full /ask live suite run consumes nearly the entire daily budget, which is why it runs once a day at most.
 
-`tool_choice` serialization in `callAIModel` (`controller.go:834`): an empty string means auto, `"required"`/`"none"` are sent as plain strings, and a value starting with `{` is sent as a forced-function object. Provider `tool_choice` errors are retried with auto; a function-parser failure is retried with no tools at all. The response parser (`aiError.UnmarshalJSON`, `controller.go`) tolerates both OpenAI-style `{"error":{"message":...}}` objects and bare-string errors (`{"error":"This model reached daily limit."}` — the KKU proxy's format).
+`tool_choice` serialization in `callAIModel` (`controller.go:972`): an empty string means auto, `"required"`/`"none"` are sent as plain strings, and a value starting with `{` is sent as a forced-function object. Provider `tool_choice` errors are retried with auto; a function-parser failure is retried with no tools at all. The response parser (`aiError.UnmarshalJSON`, `controller.go`) tolerates both OpenAI-style `{"error":{"message":...}}` objects and bare-string errors (`{"error":"This model reached daily limit."}` — the KKU proxy's format).
 
 **Provider error mapping** (`callAIModel`): a per-minute rate-limit blip (provider HTTP 429) is retried internally for short waits, else surfaced as `rateLimitError` → **429 `RATE_LIMIT`** with a `retryAfter` seconds hint. A per-day quota exhaustion — the KKU `"...daily limit"` message — is detected and returned as a typed `quotaError` → **429 `QUOTA_EXCEEDED`** with message "AI daily quota reached. Please try again later." Both surfaces map it: `/ai` Chat via an `errors.As` branch in its loop, `/ask` AskData via the shared `askAIError` helper (used at its `emitSQL`/`emitProse` sites). The distinct code lets the frontend tell "come back later" (quota) apart from "retry shortly" (rate limit) and from a generic **502 `AI_ERROR`** (real provider failure). This is the mapping only — the daily quota is pooled per model family (see `llm2viz/test-results.md` §3).
 
@@ -667,6 +669,6 @@ The generation model lives at `controller.go`'s `aiModel()` (`AI_MODEL`, product
 
 **Model split on Ask-Data.** The main model (`aiModel()`) handles all generation — `emitSQL` (right metric/machine, valid SELECT), `emitSpec` (right metric/machine/window, on the canonical path), `emitEChart` (valid chart spec), and `emitProse` (the analyze/explain prose, plus its repair), because analysis quality is the point of an "analyze this" answer. The router model (`routerModel()`) handles only the judging — every verifier. Numeric correctness of a prose answer comes from the grounded per-machine summary fed to `emitProse` (min/max/avg over ALL rows), not from the model. Note: `emitProse` was briefly moved to the router model while the main model was `kimi-k3` (a reasoning model that burned ~77s + ~5k tokens per prose call, blowing the timeout); under a fast main model that offload is unnecessary.
 
-**Testing:** the Ask-Data pipeline has three live suites in `backend/internal/modules/ai/` — `nl2sql_live_test.go` (`TestAskDataLiveQuestions`, ~39 questions through the LLM half against a schema fixture), `TestVerifyAskChartLive` (the judge in isolation), and `ask_fullloop_live_test.go` (`TestAskDataFullLoopLive`, the same cases POSTed through the real Fiber handler + live TimescaleDB — the full production path). All read the real `.env` AI settings via `liveKeyOrSkip`, so they exercise the exact provider/models production uses. Latest run results and quota guidance: [`llm2viz/test-results.md`](../llm2viz/test-results.md).
+**Testing:** the Ask-Data pipeline has three live suites in `backend/internal/modules/ai/` — `nl2sql_live_test.go` (`TestAskDataLiveQuestions`, ~39 questions through the LLM half against a schema fixture), `TestVerifyAskChartLive` (the judge in isolation), and `ask_fullloop_live_test.go` (`TestAskDataFullLoopLive`, the same cases POSTed through the real Fiber handler + live TimescaleDB — the full production path). All read the real `.env` AI settings via `liveKeyOrSkip`, so they exercise the exact provider/models production uses. Per-case results of the full-loop suite (case, expect, result, tokens, time) are written by the test itself to [`ask-demo-test-results.md`](ask-demo-test-results.md); narrative analysis and quota guidance live in [`llm2viz/test-results.md`](../llm2viz/test-results.md).
 
-The canonical path adds `compiler_test.go` — 20 tests that need **neither a provider nor a database**, because the compiler is pure Go: they assert the SQL a spec produces. That is the gate to keep, since it is the layer that makes wrong aggregations impossible. The pipeline itself was also exercised against a real database (28,049,795 readings normalized from the NJ5 dumps, canonical numbers compared per stream per day against the legacy views); the as-built write-up of that dataset, including the six bugs the live run exposed, is in `llm2viz-nj5.md`.
+The canonical path adds `compiler_test.go` — 20 tests that need **neither a provider nor a database**, because the compiler is pure Go: they assert the SQL a spec produces. That is the gate to keep, since it is the layer that makes wrong aggregations impossible. The pipeline itself was also exercised against a real database (28,049,795 readings normalized from the NJ5 dumps, canonical numbers compared per stream per day against the legacy views). For the as-built runbook of that dataset — the four onboarding cases, full SQL, and rollback — see [`onboarding-new-source.md`](onboarding-new-source.md).
