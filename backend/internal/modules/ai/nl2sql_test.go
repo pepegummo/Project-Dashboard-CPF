@@ -536,6 +536,42 @@ func TestCleanChartTextsRecoversLeak(t *testing.T) {
 	}
 }
 
+// TestUnwrapJSONString guards the shape emit_echart_option's `option` arrives in.
+// It is declared as a JSON string because Gemini leaves a schema-less object empty,
+// but Claude and OpenAI may still answer with a real object — both must survive, and
+// anything unparseable must be handed on for sanitizeEChartOption to reject.
+func TestUnwrapJSONString(t *testing.T) {
+	cases := []struct {
+		name, in, want string
+	}{
+		{"json string (gemini)", `"{\"series\":[{\"type\":\"line\"}]}"`, `{"series":[{"type":"line"}]}`},
+		{"bare object (claude/openai)", `{"series":[{"type":"line"}]}`, `{"series":[{"type":"line"}]}`},
+		{"string that isn't json", `"not an option"`, `not an option`},
+		{"empty", ``, ``},
+		{"json null", `null`, `null`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := string(unwrapJSONString(json.RawMessage(c.in))); got != c.want {
+				t.Fatalf("unwrapJSONString(%s) = %s, want %s", c.in, got, c.want)
+			}
+		})
+	}
+
+	// End to end with the real validator: the unwrapped string must survive sanitizing
+	// with its series intact — that is the whole point of the change.
+	cols := []string{"bucket", "room_temp"}
+	wrapped := json.RawMessage(`"{\"series\":[{\"type\":\"line\",\"encode\":{\"x\":\"bucket\",\"y\":\"room_temp\"}}]}"`)
+	out := sanitizeEChartOption(unwrapJSONString(wrapped), cols)
+	if string(out) == "{}" {
+		t.Fatalf("sanitize dropped an option that came in as a JSON string: %s", out)
+	}
+	// And a broken one still fails closed.
+	if got := sanitizeEChartOption(unwrapJSONString(json.RawMessage(`"{oops"`)), cols); string(got) != "{}" {
+		t.Fatalf("malformed option should degrade to {}, got %s", got)
+	}
+}
+
 // containsSpeed reports whether any row's last column equals v — a tiny test helper.
 func containsSpeed(rows [][]any, v float64) bool {
 	for _, r := range rows {

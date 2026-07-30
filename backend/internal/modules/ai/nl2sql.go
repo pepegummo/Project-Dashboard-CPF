@@ -281,7 +281,13 @@ var emitEChartTool = map[string]any{
 		"type":     "object",
 		"required": []string{"option", "caption"},
 		"properties": map[string]any{
-			"option":       map[string]any{"type": "object", "description": "A complete ECharts option: title, tooltip, xAxis, yAxis, legend, series[] with type and encode. Reference result columns by name via encode; do NOT embed data or dataset."},
+			// Declared as a STRING holding JSON, not as an object. A schema-less object
+			// property is unfillable for Gemini: it emits only the keys the schema
+			// declares and ignores additionalProperties, so this arrived as {} on every
+			// call and every answer degraded to a table. Spelling the ECharts schema out
+			// instead is not an option — it is open-ended, and it would add thousands of
+			// tokens to every request on every model. unwrapJSONString parses it back.
+			"option":       map[string]any{"type": "string", "description": "A complete ECharts option AS A JSON STRING: title, tooltip, xAxis, yAxis, legend, series[] with type and encode. Reference result columns by name via encode; do NOT embed data or dataset."},
 			"caption":      map[string]any{"type": "string", "description": "ONE short sentence, in the user's language, stating what the chart shows and at what resolution — and, when the given bucket is coarser than the user asked for, that it was aggregated to fit the window and zooming in gives finer detail."},
 			"analysis":     map[string]any{"type": "string", "description": "A SHORT analysis (1-2 sentences, same language as the question) of what the data shows — the trend, the peak/low and when, or a notable difference between machines. Ground EVERY number in the provided summary/rows; never invent values. Different from caption: caption says what the chart IS, analysis says what it MEANS."},
 			"nextQuestion": map[string]any{"type": "string", "description": "ONE natural follow-up question the user might ask next, in their language, concrete and answerable from this data (e.g. compare another machine, zoom a narrower range, look at a related metric). Phrase it as the user would type it."},
@@ -648,6 +654,19 @@ var anyTag = regexp.MustCompile(`(?s)<[^>]*>`)
 // cleanChartTexts scrubs the folded caption/analysis/nextQuestion of leaked tool-format
 // tags and recovers a nextQuestion that bled into another field. Defensive: a clean JSON
 // tool call passes through untouched.
+// unwrapJSONString accepts the chart option in either shape. emit_echart_option
+// declares it as a JSON string (see the tool schema for why), but a model that
+// answers with a real object anyway still works — the bytes pass straight through.
+// Whatever comes out is still validated by sanitizeEChartOption, so a malformed
+// string degrades to the table signal rather than reaching the browser.
+func unwrapJSONString(raw json.RawMessage) json.RawMessage {
+	var s string
+	if len(raw) > 0 && raw[0] == '"' && json.Unmarshal(raw, &s) == nil {
+		return json.RawMessage(s)
+	}
+	return raw
+}
+
 func cleanChartTexts(ce chartEmission) chartEmission {
 	if strings.TrimSpace(ce.NextQuestion) == "" {
 		for _, field := range []string{ce.Analysis, ce.Caption} {
@@ -715,7 +734,7 @@ func emitEChart(ctx context.Context, question string, cols []string, sample [][]
 	if err := json.Unmarshal([]byte(resp.Choices[0].Message.ToolCalls[0].Function.Arguments), &a); err != nil {
 		return chartEmission{}, err
 	}
-	ce := cleanChartTexts(chartEmission{Option: a.Option, Caption: a.Caption, Analysis: a.Analysis, NextQuestion: a.NextQuestion})
+	ce := cleanChartTexts(chartEmission{Option: unwrapJSONString(a.Option), Caption: a.Caption, Analysis: a.Analysis, NextQuestion: a.NextQuestion})
 	ce.Caption = truncateRunes(ce.Caption, 300)
 	ce.Analysis = truncateRunes(ce.Analysis, 500)
 	ce.NextQuestion = truncateRunes(ce.NextQuestion, 200)
