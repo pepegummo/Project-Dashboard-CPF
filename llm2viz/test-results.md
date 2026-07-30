@@ -180,13 +180,13 @@ offline test: `TestAskAIErrorMapsQuota` (429/502) ผ่าน
   เขียน `llm2viz/router-eval-results.md`. เพิ่ม env `ROUTER_EVAL_MODELS` (คั่นจุลภาค) กรองโมเดล
   เพื่อประหยัดโควตา (รัน mini อย่างเดียว)
 - **/ask full-loop** (`ask_fullloop_live_test.go`): reset/load รอบ `app.Test`, เขียน
-  `llm2viz/ask-fullloop-results.md` (columns: case, expect, tokens, time)
+  `docs/ask-demo-test-results.md` (columns: case, expect, tokens, time)
 
 รันจริง (gpt-5.4-mini only): **32 เคส = 31,270 tokens (~1.0–1.1k/เคส คงที่** เพราะพรอมป์ต์
 Router ขนาดคงที่ **)** @126s. หมายเหตุ: รอบนี้เจอ 2 เคส decline 0-token (transient blip
 ใกล้เพดานโควตา ไม่ใช่ miss จริง) — คะแนน canonical ยังยึด 29/32 จากรอบสะอาดก่อนหน้า
 - **/ask per-case:** ~~โค้ด metering พร้อมแล้ว แต่รันจริง ~200k = เต็มโควตา → เลื่อนวันใหม่~~
-  **รันแล้ว 2026-07-22 → ดู §13** (39/39, 183,542 tok เขียนลง `ask-fullloop-results.md`)
+  **รันแล้ว 2026-07-22 → ดู §13** (39/39, 183,542 tok เขียนลง `docs/ask-demo-test-results.md`)
 - รายงาน `docs/iotvision-report/index.html` เพิ่มแคตตาล็อกเคสละเอียด §3.2 (ต่อ)–(ต่อ 4):
   /ai chat 5 + router 32, /ask 39 + judge 8 (ตาราง token /ask เติมตัวเลขจริงแล้ว 2026-07-22 → §13)
 
@@ -227,7 +227,20 @@ focused widget รู้แบบ deterministic จากมาร์ค `[FOCUS
 
 - **/ask full-loop** (`TestAskDataFullLoopLive`, 39 เคส, 500s): **39/39 PASS · 183,542 tokens**
   (ต่ำกว่าประมาณ ~200k). per-case **~4.7k เฉลี่ย** — min 2,737 (`clarify_vague_en`, แค่ถามกลับ
-  ไม่รัน SQL) · max 8,353 (`speed_drops_when_th`). เขียนลง `ask-fullloop-results.md`
+  ไม่รัน SQL) · max 8,353 (`speed_drops_when_th`). เขียนลง `docs/ask-demo-test-results.md`
+
+  > ⚠️ **ตัวเลข 39/39 นี้เป็นของ 2026-07-22 ไม่ใช่สถานะปัจจุบัน** — ไทม์ไลน์:
+  >
+  > - **07-29** 28 ผ่าน / 5 ตกเพราะ assertion เก่าค้าง / 6 โควตาหมด (223,602 tok)
+  >   เหตุ: `5b438ab` (07-24) เปลี่ยนพรอมป์ต demo เป็น `$1/$2` + `time_bucket('%BUCKET%')`
+  >   แต่ `askCases` **และ `askSchemaFixture`** ไม่ได้อัปเดตตาม
+  > - **07-30** แก้ assertion + sync fixture แล้วรันใหม่ → **34 ผ่าน / 5 ตกเพราะโควตาล้วน
+  >   ไม่มีเคสไหนตกเพราะ assertion** · 5 เคสที่เคยตกผ่านครบ
+  >
+  > **สวีตนี้ใหญ่เกินโควตาไปแล้ว** — 226,690 tok เทียบเพดาน 200k/วัน (สูงกว่ารอบ 07-22 ราว 23%
+  > เพราะพรอมป์ตเรื่อง window ยาวขึ้น) รันจบในวันเดียวไม่ได้สองรอบติด
+  > เหลือ 5 เคสที่ยังไม่เคยรันจริง — ยิงเฉพาะกลุ่มด้วย `-run` ได้ในราคา ~30k
+  > รายละเอียดครบใน `docs/ask-demo-test-results.md`
   - กลุ่ม: clarify/adversarial ~2.7–4.8k (ถูกสุด — decline/clarify ไม่เดินวงเต็ม), sql ~3.3–8.4k,
     notdata/prose ~4.5–6.1k
   - **/ask ถูกกว่า /ai chat ต่อเคสมาก** (~4.7k vs ~11.4k, §11): /ask ใช้ prompt เฉพาะทาง
@@ -237,7 +250,7 @@ focused widget รู้แบบ deterministic จากมาร์ค `[FOCUS
   ควบ) ไม่ใช่ miss จริง → **canonical ยึด ~29/32 เดิม**. เคสชายขอบสลับตัวกันไปมาระหว่างรัน:
   รอบนี้ `focused-alarm-panel` **ผ่าน** (ได้ alerts), `list-skus` พลาดแทน (ได้ production)
 - Pool: /ask ≈ 183k Claude + judge บน OpenAI; router 31k OpenAI — รันควบวันเดียวได้เพราะ pool แยกกัน
-- **ครบแล้ว:** ทั้ง 3 result doc (`chat-`/`router-`/`ask-fullloop-results.md`) มีตัวเลข per-case จริง —
+- **ครบแล้ว:** ทั้ง 3 result doc (`chat-`/`router-results.md` + `docs/ask-demo-test-results.md`) มีตัวเลข per-case จริง —
   ไม่เหลือคอลัมน์ "รอวัด"
 
 ## 14. Per-call token metering + optimize forced-tool turns (2026-07-22)
@@ -274,3 +287,48 @@ turn-1 คาดลดใกล้เคียง (drop tools) → production **
 - ⚠ **ยังต้อง re-measure full-loop live** — Claude pool วันนี้หมด (183k /ask + measurements → 429
   QUOTA_EXCEEDED กลาง turn-1) → รัน `TestChatFullLoopLive` เต็ม 5 เคสวันโควตาใหม่เพื่อยืนยันตัวเลข after
   + ไม่มี regression end-to-end (drop-tools summary ใช้ pattern เดียวกับ `i>=roundCap` ที่ทำงานอยู่แล้ว)
+
+---
+
+## 15. `kimi-k3` เป็น main model บน `/ask/mhc` — รัน 2026-07-30 (**ตก 0/4 ไม่ควรใช้**)
+
+เปลี่ยน `AI_MODEL=claude-sonnet-5` → `kimi-k3` (router คงเป็น `gpt-5.4-mini`) แล้วยิง 4 คำถามจริงผ่าน
+`POST /api/ai/ask` บนโรงงาน Mahachai · **ทั้ง 4 คำถามผ่าน compiler มาแล้วด้วย query spec ตรง ๆ ก่อนหน้านี้**
+(หมวด "ทดสอบปลายทาง" ของ MHC) จึงตัดข้อสงสัยเรื่องข้อมูล/compiler ออกได้ — ที่ตกคือด่านโมเดลล้วน ๆ
+
+| # | คำถาม | เวลา | สิ่งที่ kimi ส่งออกมา | ผล |
+|---|---|---|---|---|
+| 1 | ยอดผลิตรายวันเดือนที่ผ่านมา แยกตามเครื่อง | **90.1s** | ไม่ตอบเลย — `context deadline exceeded` ชน `askCallTimeout` เป๊ะ | ❌ 502 |
+| 1↻ | (ยิงซ้ำ) | 10.5s | **ถามกลับ** "ข้อความไม่ชัดเจน ต้องการดูข้อมูลอะไรครับ" ทั้งที่คำถามระบุ "ยอดผลิต" ชัดเจน | ❌ |
+| 2 | อุณหภูมิห้องของ IQF ย้อนหลัง 7 วัน | 36.7s | **เลือกเมตริกผิด** — `produced_count` แทน `room_temp` แล้วออกกราฟ + คำบรรยายไทยเรื่องยอดผลิตอย่างมั่นใจ | ❌ **ผิดแบบเงียบ** |
+| 3 | IQF หลุดเน็ตกี่ครั้งเดือนนี้ | 28.9s | เมตริก+เครื่องถูก (`network_drop`/`IQF`) แต่ `window` = `{hours:0, from:"", to:""}` → server ตกไป default 24 ชม. ทั้งที่ถาม "เดือนนี้" | ❌ ช่วงเวลาผิด |
+| 4 | เทียบยอดผลิตกับอุณหภูมิห้องของ IQF | 60.1s | ส่งมา **เมตริกเดียว** (`produced_count`) ทั้งที่คำว่า "เทียบ...กับ..." คือหัวใจของคำถาม · `window.hours=0` อีก | ❌ |
+
+### สิ่งที่ **ไม่ใช่** สาเหตุ (ตัดออกด้วยการวัด)
+
+- **ไม่ใช่โควตา** — kimi เป็นคนละ pool กับ sonnet ที่หมดวันนี้ ทุก call คืน 200
+- **ไม่ใช่ `AI_MAX_TOKENS` 2048 ไม่พอ** — completion สูงสุดที่วัดได้ **1,158** ไม่เคยชนเพดาน ไม่มี truncation
+  (สมมติฐานตั้งต้นว่า hidden reasoning จะกินเพดานจนสเปคขาด — **ผิด**)
+- **ไม่ใช่ forced `tool_choice` ชนกับ thinking** — probe ตรงไป provider ทั้งแบบระบุชื่อฟังก์ชันและ `"required"`
+  คืน 200 ใน 4.5s / 2.7s ไม่มี error ไม่มี fallback log
+- **ไม่ใช่โมเดลตาย** — probe `"say ok"` คืนใน 8.3s · probe ด้วย catalog สังเคราะห์ 1,155 prompt tokens
+  คืน tool call ที่ใช้ได้ใน 13.8s
+
+### สาเหตุจริง: คุณภาพการเลือกเมตริก/ช่วงเวลา + ความเร็ว
+
+kimi-k3 อ่านโจทย์ไม่ตรง (เมตริกผิด, เมตริกหาย, ถามกลับโดยไม่จำเป็น) และไม่ทำตามกติกา `window` ในพรอมป์ต
+(`hours:0` สามในสี่ครั้ง) ทั้งที่กติกาเดียวกันนี้ sonnet ทำได้ 39/39 ในหมวด 1 · เวลาต่อคำถาม 10-60s
+เทียบกับ 8-15s ของ sonnet และมีหนึ่งครั้งชน 90s
+
+**ข้อสังเกตเพิ่ม:** เกตเวย์ KKU **ไม่สนใจ `reasoning_format: "hidden"`** — Moonshot คืน field `reasoning`
+กลับมาใน message เสมอ โค้ดไม่ได้อ่าน field นั้น (อ่านจาก `tool_calls` อย่างเดียว) จึงไม่พัง แต่แปลว่า
+โทเคน reasoning ถูกคิดเงินและถูกนับใน `completion_tokens` โดยปิดไม่ได้
+
+**ผู้ตัดสินพลาดด้วย 1 เคส** — เคส 2 (ถามอุณหภูมิ ได้ยอดผลิต) `gpt-5.4-mini` ให้ผ่าน ไม่สั่ง repair
+เป็นครั้งแรกที่เห็น judge ปล่อยของผิดประเภทนี้ผ่าน (หมวด 2 เคยเก็บได้หมด) — คุ้มที่จะดูพรอมป์ต judge ต่อ
+
+### สรุป
+
+**อย่าใช้ `kimi-k3` เป็น `AI_MODEL` บนเส้น llm2viz** · กลับไป `claude-sonnet-5` (โควตารีเซ็ตพรุ่งนี้)
+ถ้าต้องการตัวใช้ได้วันนี้ทันที ให้ลอง `AI_MODEL=gpt-5.4-mini` — คนละ pool ยังสด และเป็นตัวที่ทำหน้าที่ judge
+ได้ 4/4 อยู่แล้ว แต่ยังไม่เคยถูกวัดในบท generate

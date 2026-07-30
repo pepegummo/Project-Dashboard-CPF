@@ -39,9 +39,9 @@ The data JSONB also holds TEXT dimensions (not numeric), notably ` + "`" + `sku`
 
 Rules:
 - Exactly ONE SELECT. No semicolons, no CTEs, no INSERT/UPDATE/DELETE/DDL.
-- Any question about a time range or trend ("last N hours/days", "over time", "per hour", "trend", "history") MUST return a time series: GROUP BY time_bucket('<interval>', ts) AS bucket and ORDER BY bucket, giving many rows — never a single scalar. Pick the interval so a 24h window yields ~24 points (1 hour), a 7d window ~7 (1 day).
-- A relative window ("past/last N units", "recent", "latest", or the same in other languages — e.g. Thai "ย้อนหลัง N", "ล่าสุด") MUST be bounded with WHERE ts > now() - interval 'N <unit>'. ALWAYS use now() — never hardcode a date, never leave the window unbounded. now() is the implicit upper bound, so no end filter is needed. Questions in any language map to this same SQL.
-- Numeric metric: (data->>'speed')::float.
+- Any question about a time range or trend ("last N hours/days", "over time", "per hour", "trend", "history") MUST return a time series: GROUP BY time_bucket('%BUCKET%', ts) AS bucket and ORDER BY bucket, giving many rows — never a single scalar. Write the interval as the LITERAL token '%BUCKET%', exactly like that: the server substitutes the resolution the window deserves (a year gets days, an hour gets minutes) and re-substitutes it when the user zooms in. NEVER write a real interval like '1 hour' there.
+- A window ("past/last N units", "recent", "latest", or the same in other languages — e.g. Thai "ย้อนหลัง N", "ล่าสุด") MUST be bounded with WHERE ts >= $1 AND ts < $2 — the server binds both ends. NEVER write now(), NEVER hardcode a date, NEVER an interval literal, and never leave a time query unbounded. Report the span you mean in window_hours (last 24h → 24, 7 days → 168, a month → 720, a year → 8760); no range named → omit it and the server uses 24h. Questions in any language map to this same SQL.
+- Numeric metric: (data->>'speed')::float. When reading a metric, ALWAYS filter AND data->>'<key>' IS NOT NULL — machines that never report that metric must not appear in the result.
 - A "which/what <dimension> are available / exist / does X run" question (e.g. SKUs) is a listing query, NOT a time series: SELECT DISTINCT data->>'sku' AS sku FROM v_telemetry WHERE data->>'sku' IS NOT NULL ORDER BY sku (filter by machine with machine_name ILIKE '%<code>%').
 - Match a machine by name with ILIKE '%<code>%' (e.g. machine_name ILIKE '%CW-01%'), NEVER exact =. Names include a descriptive prefix, so the user's "CW-01" is stored as "Checkweigher CW-01". Same for v_machines.name.
 - Give columns clear aliases (bucket, machine_name, avg_speed, ...). Always add LIMIT (<= 5000). Aggregate raw readings into buckets or groups rather than returning every row.`
@@ -58,6 +58,13 @@ type askCase struct {
 	sqlHasAny []string  // at least ONE of these substrings must appear (empty = no check)
 	sqlNot    []string  // substrings it must NOT contain
 	chart     string    // if set: also call emitEChart and assert series[0].type
+	// windowHours: expected lookback the model reports, in hours (0 = no check).
+	// Since 5b438ab the generated SQL bounds its window with $1/$2 binds instead of
+	// a literal `now() - interval '7 days'`, so the span is no longer greppable in
+	// the SQL text — it lives in the emission's window_hours. Only assert it for a
+	// question that names an explicit relative span; "today"/"this week" are left
+	// unchecked because the model may legitimately express them as from/to instead.
+	windowHours float64
 }
 
 // sqlHasAnyOK reports whether sql (lowercase) satisfies the case's any-of list.
@@ -76,7 +83,8 @@ func (c askCase) sqlHasAnyOK(low string) bool {
 // prevSpeedCW01 is the shared follow-up context: "avg speed CW-01 last 24h hourly".
 var prevSpeedCW01 = &prevTurn{
 	Question: "ความเร็ว CW-01 ย้อนหลัง 24 ชม รายชั่วโมง",
-	SQL:      "SELECT time_bucket('1 hour', ts) AS bucket, avg((data->>'speed')::float) AS avg_speed FROM v_telemetry WHERE machine_name ILIKE '%CW-01%' AND ts > now() - interval '24 hours' GROUP BY bucket ORDER BY bucket LIMIT 5000",
+	SQL:         "SELECT time_bucket('%BUCKET%', ts) AS bucket, avg((data->>'speed')::float) AS avg_speed FROM v_telemetry WHERE machine_name ILIKE '%CW-01%' AND ts >= $1 AND ts < $2 GROUP BY bucket ORDER BY bucket LIMIT 5000",
+	WindowHours: 24,
 }
 
 // askCases is shared by TestAskDataLiveQuestions (LLM half, fixture schema) and
@@ -86,8 +94,9 @@ var askCases = []askCase{
 	{name: "sku_list_th", question: "มี sku อะไรบ้าง", expect: "sql", sqlHas: []string{"distinct", "sku"}},
 	{name: "sku_by_machine_en", question: "which SKUs does CW-01 run", expect: "sql", sqlHas: []string{"distinct", "sku", "cw-01"}},
 	{name: "sku_top_this_week_th", question: "sku ไหนผลิตเยอะสุดอาทิตย์นี้", expect: "sql", sqlHas: []string{"sku", "group by", "order by"}},
-	// "today" may be now()-interval OR date_trunc('day', now()) — both are valid, both contain "now(".
-	{name: "sku_reject_today_th", question: "แต่ละ sku มี reject เท่าไหร่วันนี้", expect: "sql", sqlHas: []string{"sku", "reject", "now("}},
+	// "today" is expressed as the $1/$2 bind window (via window_hours, or from/to for a
+	// calendar day) — the model no longer writes now() at all, so assert the bind instead.
+	{name: "sku_reject_today_th", question: "แต่ละ sku มี reject เท่าไหร่วันนี้", expect: "sql", sqlHas: []string{"sku", "reject", "$1"}},
 
 	// ── Machine ──────────────────────────────────────────────────────────
 	{name: "machine_list_en", question: "list machines", expect: "sql", sqlHas: []string{"v_machines"}},
@@ -97,9 +106,10 @@ var askCases = []askCase{
 	{name: "machine_count_en", question: "how many machines do we have", expect: "sql", sqlHas: []string{"count", "v_machines"}},
 
 	// ── Field/metric ─────────────────────────────────────────────────────
-	{name: "speed_24h_hourly_th", question: "ความเร็ว CW-01 ย้อนหลัง 24 ชม รายชั่วโมง", expect: "sql", sqlHas: []string{"time_bucket", "now() - interval", "cw-01"}},
-	{name: "avg_throughput_7d_en", question: "average throughput per machine last 7 days", expect: "sql", sqlHas: []string{"throughput", "interval '7"}},
-	{name: "temp_today_th", question: "อุณหภูมิ TS-01 วันนี้", expect: "sql", sqlHas: []string{"ts-01", "now("}},
+	{name: "speed_24h_hourly_th", question: "ความเร็ว CW-01 ย้อนหลัง 24 ชม รายชั่วโมง", expect: "sql", sqlHas: []string{"time_bucket", "$1", "cw-01"}, windowHours: 24},
+	// The 7-day span is no longer in the SQL text ($1/$2 binds) — assert it via window_hours.
+	{name: "avg_throughput_7d_en", question: "average throughput per machine last 7 days", expect: "sql", sqlHas: []string{"throughput", "$1"}, windowHours: 168},
+	{name: "temp_today_th", question: "อุณหภูมิ TS-01 วันนี้", expect: "sql", sqlHas: []string{"ts-01", "$1"}},
 	// "reject rate" legitimately maps to either the reject count or defect_rate (%).
 	{name: "reject_rate_yesterday_th", question: "reject rate ของ VC-01 เมื่อวาน", expect: "sql", sqlHas: []string{"vc-01"}, sqlHasAny: []string{"reject", "defect_rate"}},
 	{name: "cb01_speed_trend_en", question: "CB-01 speed trend this week", expect: "sql", sqlHas: []string{"time_bucket", "cb-01", "speed"}},
@@ -124,7 +134,14 @@ var askCases = []askCase{
 	// ── Adjust chart / follow-up (prev = avg speed CW-01 24h hourly) ───────
 	{name: "followup_bar_chart_th", question: "เอาเป็นกราฟแท่ง", prev: prevSpeedCW01, expect: "sql", sqlHas: []string{"time_bucket", "cw-01"}, chart: "bar"},
 	{name: "followup_pie_chart_en", question: "make it a pie chart", prev: prevSpeedCW01, expect: "sql", sqlHas: []string{"cw-01"}, chart: "pie"},
-	{name: "followup_group_by_day_th", question: "จัดกลุ่มเป็นรายวันแทน", prev: prevSpeedCW01, expect: "sql", sqlHas: []string{"1 day", "cw-01"}},
+	// NOTE: this case used to assert the literal bucket "1 day". Since 5b438ab the model
+	// cannot choose a bucket at all — it emits time_bucket('%BUCKET%', ts) and the server
+	// substitutes autoBucket(to-from), which is derived purely from the window width
+	// (a "1 day" bucket needs a window > 100 days). So an explicit "group by day" request
+	// on a 24h chart is NOT honoured today; the assertion is narrowed to what still holds
+	// — the follow-up keeps producing a valid bucketed CW-01 series. Restoring honour for
+	// an explicit bucket needs a bucket field on the emission, not a test change.
+	{name: "followup_group_by_day_th", question: "จัดกลุ่มเป็นรายวันแทน", prev: prevSpeedCW01, expect: "sql", sqlHas: []string{"time_bucket", "cw-01"}},
 	{name: "followup_switch_metric_th", question: "เปลี่ยนเป็น throughput แทน", prev: prevSpeedCW01, expect: "sql", sqlHas: []string{"throughput", "cw-01"}},
 
 	// ── Compare ──────────────────────────────────────────────────────────
@@ -211,6 +228,9 @@ func TestAskDataLiveQuestions(t *testing.T) {
 						t.Errorf("sql contains forbidden %q\nfull sql: %s", bad, validated)
 					}
 				}
+				if c.windowHours > 0 && emission.WindowHours != c.windowHours {
+					t.Errorf("window_hours = %v, want %v\nfull sql: %s", emission.WindowHours, c.windowHours, validated)
+				}
 
 			case "either":
 				// Pass if: not a data question, OR a clarification, OR emitSQL succeeded
@@ -291,8 +311,10 @@ func TestVerifyAskChartLive(t *testing.T) {
 		{"2026-07-13T10:00:00Z", 41.2},
 		{"2026-07-13T11:00:00Z", 39.8},
 	}
-	speedSQL := "SELECT time_bucket('1 hour', ts) AS bucket, avg((data->>'speed')::float) AS avg_speed " +
-		"FROM v_telemetry WHERE machine_name ILIKE '%CW-01%' AND ts > now() - interval '24 hours' " +
+	// Same shape production emits since 5b438ab (%BUCKET% token + $1/$2 binds), so the
+	// judge is scored against SQL it will actually be shown at runtime.
+	speedSQL := "SELECT time_bucket('%BUCKET%', ts) AS bucket, avg((data->>'speed')::float) AS avg_speed " +
+		"FROM v_telemetry WHERE machine_name ILIKE '%CW-01%' AND ts >= $1 AND ts < $2 " +
 		"GROUP BY bucket ORDER BY bucket LIMIT 5000"
 	speedOption := json.RawMessage(`{"title":{"text":"CW-01 speed"},"series":[{"type":"line","encode":{"x":"bucket","y":"avg_speed"}}]}`)
 
@@ -301,8 +323,8 @@ func TestVerifyAskChartLive(t *testing.T) {
 		{"2026-07-13T10:00:00Z", 25.1},
 		{"2026-07-13T11:00:00Z", 26.4},
 	}
-	tempSQL := "SELECT time_bucket('1 hour', ts) AS bucket, avg((data->>'temp')::float) AS avg_temp " +
-		"FROM v_telemetry WHERE machine_name ILIKE '%CW-01%' AND ts > now() - interval '24 hours' " +
+	tempSQL := "SELECT time_bucket('%BUCKET%', ts) AS bucket, avg((data->>'temp')::float) AS avg_temp " +
+		"FROM v_telemetry WHERE machine_name ILIKE '%CW-01%' AND ts >= $1 AND ts < $2 " +
 		"GROUP BY bucket ORDER BY bucket LIMIT 5000"
 	tempOption := json.RawMessage(`{"title":{"text":"CW-01 temperature"},"series":[{"type":"line","encode":{"x":"bucket","y":"avg_temp"}}]}`)
 

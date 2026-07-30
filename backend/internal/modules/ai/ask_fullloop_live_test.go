@@ -38,6 +38,7 @@ type askResponse struct {
 		EchartOption  json.RawMessage `json:"echartOption"`
 		Answer        string          `json:"answer"`
 		Clarification string          `json:"clarification"`
+		WindowHours   float64         `json:"windowHours"`
 	} `json:"data"`
 	Error struct {
 		Message string `json:"message"`
@@ -179,6 +180,9 @@ func TestAskDataFullLoopLive(t *testing.T) {
 						t.Errorf("sql contains forbidden %q\nfull sql: %s", bad, out.Data.SQL)
 					}
 				}
+				if c.windowHours > 0 && out.Data.WindowHours != c.windowHours {
+					t.Errorf("windowHours = %v, want %v\nfull sql: %s", out.Data.WindowHours, c.windowHours, out.Data.SQL)
+				}
 				if len(out.Data.Rows) == 0 {
 					t.Logf("note: query ran but returned 0 rows — chart/judge stages skipped")
 				}
@@ -221,6 +225,6 @@ func TestAskDataFullLoopLive(t *testing.T) {
 		})
 	}
 
-	writeSuiteTokenReport(t, "../../../../llm2viz/ask-fullloop-results.md", "/ai/ask full-loop live results",
+	writeSuiteTokenReport(t, "../../../../docs/ask-demo-test-results.md", "/ask/demo full-loop live results",
 		[]string{"case", "expect", "result", "tokens", "time"}, askRows, askTok, time.Since(askStart))
 }
