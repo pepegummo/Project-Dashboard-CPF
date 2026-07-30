@@ -11,7 +11,8 @@ Project-Dashboard/
 ├── backend/                    # Go (module iot-dashboard) + Fiber v2 + pgx/v5
 │   ├── cmd/
 │   │   ├── server/main.go      # Entry point — auto-runs migrations on start
-│   │   └── backfill/main.go    # Standalone tool: seeds ~2.3M historical telemetry rows
+│   │   ├── backfill/main.go    # Demo telemetry: seeds ~2.3M historical rows
+│   │   └── normalize-backfill/ # Real plants: registry → canonical series/readings + rollups
 │   └── internal/
 │       ├── config/             # env.go — loads .env via godotenv
 │       ├── database/           # pgxpool singleton
@@ -33,7 +34,8 @@ Project-Dashboard/
         ├── stores/             # Pinia: auth, machines, telemetry, dashboards, alerts
         ├── services/           # api.service.ts, ws.service.ts
         ├── composables/        # useTelemetry, useWebSocket
-        ├── pages/              # Login, DashboardList, DashboardEditor, Machines, Alerts, AI
+        ├── pages/              # Login, DashboardList, DashboardEditor, Machines, Alerts,
+        │                       #   AI (/ai chat), Ask (/ask + /ask/:scope), LedView (/led)
         ├── components/
         │   ├── layout/         # Sidebar, TopBar
         │   ├── dashboard/      # GridStackCanvas, WidgetToolbox, WidgetConfigModal
@@ -54,8 +56,12 @@ cp .env.example .env
 docker compose up -d
 
 # Migrations + seed data run automatically on backend startup.
-# Optionally load ~2.3M rows of historical telemetry:
+# Optionally load ~2.3M rows of historical DEMO telemetry:
 docker compose exec backend ./backfill
+
+# Real plant data instead? Register the source, then drain it into the
+# canonical model and refresh rollups — see docs/onboarding-new-source.md:
+docker compose exec backend ./normalize-backfill
 ```
 
 **Access:**
@@ -140,7 +146,7 @@ Connect: `ws://localhost:4000/ws?token=<jwt>`
 // Client → Server: subscribe to machine telemetry
 { "type": "subscribe", "payload": { "machineIds": ["uuid1", "uuid2"] }, "timestamp": 1719000000000 }
 
-// Server → Client: telemetry broadcast (1/second)
+// Server → Client: telemetry broadcast (on ingest, plus a 30s fallback poll)
 { "type": "telemetry", "payload": { "machineId": "...", "machineName": "CW-01", "timestamp": "...", "data": { "weight": 501.3, "speed": 62 } }, "timestamp": ... }
 
 // Server → Client: alert event
@@ -156,11 +162,14 @@ Two independent AI surfaces, both backed by an OpenAI-compatible chat completion
 | Surface | Route | Purpose |
 |---|---|---|
 | Chat Assistant | `POST /api/ai/chat` | Conversational agent — intent router → tool loop → verify-then-repair; reads live telemetry and stages dashboard edits via structured tool calls. |
-| Ask-Data | `POST /api/ai/ask` | Natural language → hardened read-only SQL → LLM-authored ECharts chart; results can be saved to boards. |
+| Ask-Data | `POST /api/ai/ask` | Natural language → hardened read-only SQL → LLM-authored ECharts chart; results can be saved to boards. One URL shape per dataset: `/ask/:scope` (scopes listed by `GET /api/ai/scopes`). |
 
 Production runs on KKU GenAI: generation model `claude-sonnet-5` (`AI_MODEL`), router/verifier model `gpt-5.4-mini` (`AI_ROUTER_MODEL`).
 
-See [`docs/ai-pages.md`](docs/ai-pages.md) for the full end-to-end pipeline breakdown.
+See [`docs/ai-pages.md`](docs/ai-pages.md) for the full end-to-end pipeline breakdown,
+[`docs/onboarding-new-source.md`](docs/onboarding-new-source.md) for registering a new upstream
+table/plant, and [`docs/ask-demo-test-results.md`](docs/ask-demo-test-results.md) for the latest
+`/ask/demo` full-loop results.
 
 ---
 
@@ -207,20 +216,30 @@ GET    /api/ai/conversations
 POST   /api/ai/conversations
 GET    /api/ai/conversations/:id/messages
 POST   /api/ai/conversations/:id/messages
+GET    /api/ai/preview-draft
+PUT    /api/ai/preview-draft
+DELETE /api/ai/preview-draft
+PUT    /api/ai/selected-dashboard
 POST   /api/ai/chat
+GET    /api/ai/scopes
 POST   /api/ai/ask
 POST   /api/ai/run-sql
 GET    /api/ai/boards
 POST   /api/ai/boards
 GET    /api/ai/boards/:id
+PATCH  /api/ai/boards/:id
 DELETE /api/ai/boards/:id
 POST   /api/ai/boards/:id/charts
 DELETE /api/ai/boards/:id/charts/:chartId
+
+POST   /api/led/token          # admin/editor only — generate per-org led-viewer JWT
+GET    /api/led/token
+DELETE /api/led/token
 ```
 
 ---
 
-## 📡 Simulated Machines
+## 📡 Demo Machines
 
 | Machine | Type | Key Fields |
 |---|---|---|
@@ -229,7 +248,9 @@ DELETE /api/ai/boards/:id/charts/:chartId
 | Conveyor Belt CB-01 | `conveyor` | speed, load, rpm, vibration |
 | Vision AI Camera VC-01 | `vision_camera` | defect_rate, inspected, passed, failed, confidence |
 
-Telemetry is generated every **1 second** with realistic random walks and occasional anomaly spikes to trigger alerts.
+There is **no simulator**. Devices POST to `/api/telemetry/:id/ingest`; each row is alert-evaluated
+and broadcast over WS immediately, and the broadcaster re-polls the DB every 30s as a fallback
+heartbeat. The `backfill` tool seeds these four machines with historical 1s-granularity rows.
 
 ---
 
@@ -243,6 +264,8 @@ Telemetry is generated every **1 second** with realistic random walks and occasi
 | `status-card` | _(machine-level)_ |
 | `table` | _(all fields)_ |
 | `alarm-panel` | `maxItems`, `severities` |
+| `daily-count` | `field`, `bucket` (minute / hour / day) |
+| `chart` | `fields[]`, `timeRange`, `chartType` (line / bar / area) — multi-field overlay |
 
 ---
 
@@ -266,7 +289,7 @@ JWT tokens expire after 24h (configurable via `JWT_EXPIRES_IN`).
 - [ ] Enable SSL/TLS termination at the load balancer
 - [ ] Set up TimescaleDB retention policy for `telemetry_raw`
 - [ ] Configure Redis for session storage (optional)
-- [ ] Set up log aggregation (structured JSON logs via morgan)
+- [ ] Set up log aggregation (Fiber logger middleware)
 - [ ] Configure monitoring / alerting for the backend service
 
 ---
