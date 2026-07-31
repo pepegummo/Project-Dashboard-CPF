@@ -2,6 +2,11 @@
 
 A production-style MVP for real-time industrial monitoring, built with Vue 3, Go (Fiber v2), PostgreSQL/TimescaleDB, and WebSocket telemetry streaming.
 
+On top of the dashboards sits **LLM2Viz** — ask a plant question in plain language and get a
+chart back: NL → hardened read-only SQL over the canonical model → an LLM-authored ECharts
+option, at `/ask/:scope`. [`docs/llm2viz-flow.md`](docs/llm2viz-flow.md) is the one-picture map
+of that route; the [AI Assistant](#-ai-assistant) section below has the rest.
+
 ---
 
 ## 📐 Architecture
@@ -176,6 +181,8 @@ Connect: `ws://localhost:4000/ws?token=<jwt>`
 { "type": "alert", "payload": { "alertId": "...", "severity": "warning", "field": "weight", "value": 511.2, ... }, "timestamp": ... }
 ```
 
+Other message types on the same envelope: `unsubscribe`, `machine_status`, `ping` / `pong`, `error`.
+
 ---
 
 ## 🤖 AI Assistant
@@ -192,10 +199,15 @@ Production runs on KKU GenAI: generation model `claude-sonnet-5` (`AI_MODEL`), r
 Start with [`docs/llm2viz-flow.md`](docs/llm2viz-flow.md) — the one-picture map of the whole
 route (upstream DB → registry → normalizer → canonical → `/ask` → chart), with a table of which
 box lives in which file. Then
-[`docs/ai-pages.md`](docs/ai-pages.md) for the full end-to-end pipeline breakdown,
+[`docs/ai-pages.md`](docs/ai-pages.md) for the full end-to-end pipeline breakdown, and
 [`docs/onboarding-new-source.md`](docs/onboarding-new-source.md) for registering a new upstream
-table/plant, and [`docs/ask-demo-test-results.md`](docs/ask-demo-test-results.md) for the latest
-`/ask/demo` full-loop results.
+table/plant — with [`docs/dump-checklist.md`](docs/dump-checklist.md) as its short tick-through
+companion (open dump → land → register → pre-flight SQL → run). `scripts/nj5-*.sql` and
+`scripts/mhc-*.sql` are the two real worked examples of that runbook.
+
+Live-test results: [`docs/ask-demo-test-results.md`](docs/ask-demo-test-results.md) for the
+per-case `/ask/demo` full-loop output, and [`llm2viz/test-results.md`](llm2viz/test-results.md)
+for the latest run plus KKU quota guidance before you fire another one.
 
 **Demo recordings** — `Video_LLM2Viz/Ask.zip` contains `LLM2Viz.mp4` (the full
 question → SQL → chart loop) and `Ask_MHC.mp4` (the Mahachai plant scope).
