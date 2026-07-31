@@ -218,7 +218,7 @@
   <div class="toc-item sub"><span class="t">3.1 ประเภทเคสทดสอบและขอบเขต</span><span class="dots"></span><span class="pg">42</span></div>
   <div class="toc-item sub"><span class="t">3.2 การตรวจสอบความถูกต้อง</span><span class="dots"></span><span class="pg">43</span></div>
   <div class="toc-item sub"><span class="t">3.2 (ต่อ) แคตตาล็อกเคส /ai + สรุป token</span><span class="dots"></span><span class="pg">44</span></div>
-  <div class="toc-item sub"><span class="t">3.2 (ต่อ 2) /ai — Router eval 32 เคส</span><span class="dots"></span><span class="pg">45</span></div>
+  <div class="toc-item sub"><span class="t">3.2 (ต่อ 2) /ai — Router eval 33 เคส</span><span class="dots"></span><span class="pg">45</span></div>
   <div class="toc-item sub"><span class="t">3.2 (ต่อ 3) /ask — 39 เคส (1/2)</span><span class="dots"></span><span class="pg">46</span></div>
   <div class="toc-item sub"><span class="t">3.2 (ต่อ 4) /ask — 39 เคส (2/2) + ผู้ตรวจ</span><span class="dots"></span><span class="pg">47</span></div>
   <div class="toc-item sub"><span class="t">3.3 การใช้ Token และโควตา</span><span class="dots"></span><span class="pg">48</span></div>
@@ -1331,11 +1331,11 @@ flowchart LR
   </ul>
   <h3>อัตราการผ่าน (ผลทดสอบล่าสุด)</h3>
   <table>
-    <tr><th>ชุดทดสอบ</th><th style="width:30mm">ผลการผ่าน</th></tr>
-    <tr><td>/ask (ฝั่งโมเดล 39 เคส)</td><td>39/39</td></tr>
-    <tr><td>/ask เต็มลูป (บน DB จริง)</td><td>39/39</td></tr>
-    <tr><td>ผู้ตรวจกราฟ / ผู้ตรวจคำอธิบาย</td><td>4/4 · 4/4</td></tr>
-    <tr><td>Router (gpt-5.4-mini, 32 เคส)</td><td>29/32 (91%)</td></tr>
+    <tr><th>ชุดทดสอบ</th><th style="width:26mm">ผลการผ่าน</th><th style="width:30mm">วัดเมื่อ</th></tr>
+    <tr><td>/ask (ฝั่งโมเดล 39 เคส)</td><td>39/39</td><td>31 ก.ค. 2569</td></tr>
+    <tr><td>/ask เต็มลูป (บน DB จริง)</td><td>39/39</td><td>30–31 ก.ค. 2569<br><span style="font-size:8pt">(รวม 3 รอบ — สวีตเกินโควตารายวัน)</span></td></tr>
+    <tr><td>ผู้ตรวจกราฟ / ผู้ตรวจคำอธิบาย</td><td>4/4 · 4/4</td><td>18 ก.ค. 2569</td></tr>
+    <tr><td>Router (gpt-5.4-mini, 33 เคส)</td><td>27/33 (82%)<br><span style="font-size:8pt">ตอบผิดจริง 2 · อีก 4 เป็น 0-token decline</span></td><td>31 ก.ค. 2569</td></tr>
   </table>
   <div class="note">ผลของผู้ตรวจ LLM มีความไม่แน่นอน (probabilistic) ตามธรรมชาติของโมเดล จึงควรรันซ้ำหลายครั้งเพื่อประเมินความน่าเชื่อถือ</div>
   <div class="ftr"><span>3.2 การตรวจสอบความถูกต้อง</span></div>
@@ -1356,21 +1356,21 @@ flowchart LR
   </table>
   <h3>สรุปโทเคนต่อชุดทดสอบ</h3>
   <table>
-    <tr><th>ชุดทดสอบ</th><th style="width:18mm">เคส</th><th>โทเคน (วัด 21 ก.ค. 2569)</th></tr>
-    <tr><td>/ai — chat full-loop</td><td>5</td><td><b>57,141</b> (วัดจริงต่อเคส)</td></tr>
-    <tr><td>/ai — router eval (gpt-5.4-mini)</td><td>32</td><td><b>31,270</b> (~1.0–1.1k/เคส คงที่ เพราะพรอมป์ต์ Router ขนาดคงที่)</td></tr>
-    <tr><td>/ask — full-loop (39 เคส)</td><td>39</td><td><b>183,542</b> (วัดจริงต่อเคส 22 ก.ค. 2569 — ~4.7k/เคส เฉลี่ย; ต่ำกว่าประมาณ ~200k)</td></tr>
+    <tr><th>ชุดทดสอบ</th><th style="width:18mm">เคส</th><th>โทเคน (วัดจริงต่อเคส)</th></tr>
+    <tr><td>/ai — chat full-loop</td><td>5</td><td><b>57,141</b> (21 ก.ค. 2569 — <b>โค้ด chat เปลี่ยนหลังจากนั้น ต้องวัดใหม่</b>)</td></tr>
+    <tr><td>/ai — router eval (gpt-5.4-mini)</td><td>33</td><td><b>31,591</b> (31 ก.ค. 2569 — ~1.0–1.1k/เคส คงที่ เพราะพรอมป์ต์ Router ขนาดคงที่)</td></tr>
+    <tr><td>/ask — full-loop (39 เคส)</td><td>39</td><td><b>247,915</b> (วัดจริงต่อเคส 30–31 ก.ค. 2569 — ~6.4k/เคส เฉลี่ย; <b>เกินโควตา 200k</b> จึงต้องแบ่งรัน)</td></tr>
     <tr><td>ผู้ตรวจ chart + prose</td><td>4 + 4</td><td>รวมอยู่ในต้นทุน /ask</td></tr>
   </table>
-  <div class="note">วัดโทเคนต่อเคส (tokenMeter) ครบทั้ง 3 ชุดแล้ว — ผลเขียนลง <span class="route">llm2viz/router-eval-results.md</span>, <span class="route">llm2viz/chat-fullloop-results.md</span> และ <span class="route">docs/ask-demo-test-results.md</span>. /ask ถูกกว่า /ai chat ต่อเคสมาก (~4.7k เทียบ ~11.4k) เพราะใช้พรอมป์ต์เฉพาะทาง (emitSQL/emitEChart) ไม่ต้องส่ง systemPromptUnified + tool schemas ครบชุดซ้ำทุกรอบเหมือน chat loop</div>
+  <div class="note">วัดโทเคนต่อเคส (tokenMeter) ครบทั้ง 3 ชุดแล้ว — ผลเขียนลง <span class="route">llm2viz/router-eval-results.md</span>, <span class="route">llm2viz/chat-fullloop-results.md</span> และ <span class="route">docs/ask-demo-test-results.md</span>. /ask ยังถูกกว่า /ai chat ต่อเคส (~6.4k เทียบ ~11.4k) เพราะใช้พรอมป์ต์เฉพาะทาง (emitSQL/emitEChart) ไม่ต้องส่ง systemPromptUnified + tool schemas ครบชุดซ้ำทุกรอบเหมือน chat loop</div>
   <div class="ftr"><span>3.2 (ต่อ) แคตตาล็อกเคส /ai — แชทเต็มลูป และสรุป token</span></div>
 </div>
 
 <!-- 3.2c /ai router eval 32 cases -->
 <div class="sheet catalog">
-  <div class="hdr"><span><b>ภาคที่ 3</b> · การทดสอบและคุณภาพ · AI</span><span>3.2 (ต่อ 2) /ai — Router eval 32 เคส</span></div>
-  <h2 class="sec">3.2 (ต่อ 2) /ai — Router eval 32 เคส (จำแนกเจตนา)</h2>
-  <p class="indent">Router eval (<span class="route">TestRouterBakeOff</span>) ตรวจว่า classify_intent คืนเจตนาตรงชุดที่คาดหรือไม่ 32 เคส (เดิม 24 + เพิ่ม 8) แต่ละเคสใช้ ~1.0–1.1k โทเคน (รวม 31,270) ผลล่าสุด gpt-5.4-mini 29/32</p>
+  <div class="hdr"><span><b>ภาคที่ 3</b> · การทดสอบและคุณภาพ · AI</span><span>3.2 (ต่อ 2) /ai — Router eval 33 เคส</span></div>
+  <h2 class="sec">3.2 (ต่อ 2) /ai — Router eval 33 เคส (จำแนกเจตนา)</h2>
+  <p class="indent">Router eval (<span class="route">TestRouterBakeOff</span>) ตรวจว่า classify_intent คืนเจตนาตรงชุดที่คาดหรือไม่ 33 เคส (เดิม 24 · +8 · +1 <span class="route">multi-widget-edit</span> จากฟีเจอร์ multiTarget) แต่ละเคสใช้ ~1.0–1.1k โทเคน (รวม 31,591) ผลล่าสุด gpt-5.4-mini <b>27/33</b> วัด 31 ก.ค. 2569</p>
   <table>
     <tr><th style="width:58mm">ข้อความ</th><th>เจตนาที่คาด</th></tr>
     <tr><td>"สวัสดีครับ" / "สวัสดี"</td><td>chat</td></tr>
@@ -1399,8 +1399,8 @@ flowchart LR
     <tr><td>"เพิ่ม widget อุณหภูมิ CW-01 ด้วย แต่ก่อนอื่นบอก speed" (ผสม)</td><td>read_metric / edit_widget</td></tr>
     <tr><td>"แก้ให้หน่อย" (กำกวม)</td><td><b>ต้องปฏิเสธ</b> (ok=false)</td></tr>
   </table>
-  <div class="note warn">3 เคสที่ยังพลาดเป็นพวก "โฟกัสบริบทวิดเจ็ตล้วน" ไม่มีคีย์เวิร์ด เช่น "ตอนนี้เท่าไหร่" (คาด production ได้ read_metric) และ "ตอนนี้เป็นยังไงบ้าง" (คาด alerts ได้ chat)</div>
-  <div class="ftr"><span>3.2 (ต่อ 2) /ai — Router eval 32 เคส</span></div>
+  <div class="note warn"><b>ผลรอบ 31 ก.ค. 2569 — 27/33</b> · ตอบผิดจริงมีแค่ <b>2 เคส</b> คือพวก "โฟกัสบริบทวิดเจ็ตล้วน" ไม่มีคีย์เวิร์ด — <span class="route">focused-count-now</span> ("ตอนนี้เท่าไหร่" คาด production ได้ read_metric) และ <span class="route">trap-action-but-read</span> · อีก <b>4 เคสเป็น 0-token decline</b> (0.00s ไม่มีการเรียกโมเดลจริง) ซึ่งเป็น blip ของผู้ให้บริการ ไม่ใช่การจำแนกผิด — <span class="route">classifyIntentWithModel</span> กลืน error ทิ้ง คืนแค่ ok=false ทำให้ harness แยกสองกรณีนี้ไม่ออก ถ้าจะให้คะแนนเชื่อถือได้ต้องแก้ให้รายงาน error แยก</div>
+  <div class="ftr"><span>3.2 (ต่อ 2) /ai — Router eval 33 เคส</span></div>
 </div>
 
 <!-- 3.2d /ask cases part 1 -->
@@ -1493,11 +1493,11 @@ flowchart LR
   <h3>เพดานการใช้งานต่อวัน (คำนวณจากค่าที่วัดจริง)</h3>
   <table>
     <tr><th>การใช้งาน</th><th style="width:34mm">โทเคนต่อครั้ง</th><th style="width:38mm">โควตา 200k รองรับ</th></tr>
-    <tr><td>/ask — 1 คำถาม</td><td>~4,700 (183,542 ÷ 39)</td><td><b>~42 คำถาม/วัน</b></td></tr>
+    <tr><td>/ask — 1 คำถาม</td><td>~6,357 (247,915 ÷ 39)</td><td><b>~31 คำถาม/วัน</b></td></tr>
     <tr><td>/ai — 1 เทิร์นสนทนา</td><td>~11,400 (57,141 ÷ 5)</td><td><b>~17 เทิร์น/วัน</b></td></tr>
   </table>
   <p class="indent">ตัวเลขนี้เป็นเพดานของ<b>ทั้งองค์กรรวมกัน</b> ไม่ใช่ต่อผู้ใช้ และโควตาก้อนเดียวกันถูกใช้โดยการรันชุดทดสอบด้วย การลดโทเคน ~11% จึงเท่ากับเพิ่มความจุราว 2 เทิร์นต่อวัน หากจะเปิดใช้กับผู้ใช้จำนวนมาก ต้องพิจารณาเพิ่มโควตาหรือเปลี่ยนผู้ให้บริการเป็นลำดับแรก</p>
-  <div class="note warn"><b>โควตาแบบใช้ร่วมต่อตระกูลโมเดล</b> — ผู้ให้บริการ (KKU) ให้โควตา 200,000 โทเคน/วัน แบบ <b>ใช้ร่วมกันต่อตระกูลโมเดล</b> ไม่ใช่ต่อโมเดล การรัน /ask ครบ 39 เคส ใช้ 183,542 โทเคน (~92% ของโควตาทั้งวัน) และการรัน /ask กับ /ai chat พร้อมกัน (~241k) จะเกินโควตา</div>
+  <div class="note warn"><b>โควตาแบบใช้ร่วมต่อตระกูลโมเดล</b> — ผู้ให้บริการ (KKU) ให้โควตา 200,000 โทเคน/วัน แบบ <b>ใช้ร่วมกันต่อตระกูลโมเดล</b> ไม่ใช่ต่อโมเดล การรัน /ask ครบ 39 เคส ใช้ 247,915 โทเคน = <b>124% ของโควตาทั้งวัน</b> จึงรันจบในรอบเดียวไม่ได้ ต้องแบ่งยิงด้วย <span class="route">-run</span> ข้ามวัน</div>
   <h3>แนวทางลดและควบคุมโทเคน</h3>
   <ul>
     <li>แยกโมเดล Router/ผู้ตรวจ (<span class="route">AI_ROUTER_MODEL</span>) ออกจากโมเดลสร้างคำตอบ ไม่ให้การทดสอบเบียดโควตาระบบจริง</li>

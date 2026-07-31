@@ -18,29 +18,37 @@ Project-Dashboard/
 │       ├── database/           # pgxpool singleton
 │       ├── migrate/            # embedded SQL migrations, run on startup (no CLI)
 │       ├── broadcaster/        # polls DB every 30s → broadcasts telemetry over WS
+│       ├── normalizer/         # registry-driven drain: upstream tables → series/readings
 │       ├── websocket/          # ws_gateway.go — gofiber/websocket hub at GET /ws
 │       ├── middleware/         # JWT auth, error handler
 │       └── modules/
 │           ├── auth/           # login, JWT sign/verify, bcrypt
+│           ├── admin/          # source registry status, drift check, pending machines
 │           ├── machines/       # CRUD + dynamic field schema
-│           ├── telemetry/      # ingest, latest, series, aggregate, daily-count
+│           ├── telemetry/      # ingest, latest, series, aggregate, counts, skus
 │           ├── alerts/         # rule CRUD + EvaluateTelemetry
 │           ├── dashboards/     # dashboard + widget CRUD, layout PATCH
 │           ├── ai/             # /ai/chat and /ai/ask pipelines (see docs/ai-pages.md)
 │           └── led/            # LED kiosk token: generate/get/revoke
 │
-└── frontend/                   # Vue 3 + Vite + TypeScript
-    └── src/
-        ├── stores/             # Pinia: auth, machines, telemetry, dashboards, alerts
-        ├── services/           # api.service.ts, ws.service.ts
-        ├── composables/        # useTelemetry, useWebSocket
-        ├── pages/              # Login, DashboardList, DashboardEditor, Machines, Alerts,
-        │                       #   AI (/ai chat), Ask (/ask + /ask/:scope), LedView (/led)
-        ├── components/
-        │   ├── layout/         # Sidebar, TopBar
-        │   ├── dashboard/      # GridStackCanvas, WidgetToolbox, WidgetConfigModal
-        │   └── widgets/        # LineChart, Gauge, KpiCard, StatusCard, Table, AlarmPanel
-        └── layouts/            # AppLayout (sidebar + topbar shell)
+├── frontend/                   # Vue 3 + Vite + TypeScript
+│   └── src/
+│       ├── stores/             # Pinia: auth, machines, telemetry, dashboards, alerts
+│       ├── services/           # api.service.ts, ws.service.ts
+│       ├── composables/        # useTelemetry, useWebSocket
+│       ├── pages/              # Login, DashboardList, DashboardEditor, Machines, Alerts,
+│       │                       #   AI (/ai chat), Ask (/ask + /ask/:scope), LedView (/led)
+│       ├── components/
+│       │   ├── layout/         # Sidebar, TopBar
+│       │   ├── dashboard/      # GridStackCanvas, WidgetToolbox, WidgetConfigModal
+│       │   └── widgets/        # LineChart, Gauge, KpiCard, StatusCard, Table, AlarmPanel
+│       └── layouts/            # AppLayout (sidebar + topbar shell)
+│
+├── docs/                       # llm2viz-flow (route map), ai-pages, onboarding runbook
+├── scripts/                    # init-timescale + the NJ5 / MHC onboarding SQL
+├── llm2viz/                    # live-test result logs for the /ask + /ai pipelines
+├── load-test/                  # REST/WS load scripts + tool comparison
+└── Video_LLM2Viz/              # demo recordings (Ask.zip)
 ```
 
 ---
@@ -76,7 +84,7 @@ docker compose exec backend ./normalize-backfill
 ## 💻 Local Development (without Docker)
 
 ### Prerequisites
-- Go 1.x
+- Go 1.26
 - Node.js 20+
 - PostgreSQL 16 + TimescaleDB extension
 - Redis (optional — not strictly required for dev)
@@ -116,16 +124,31 @@ Frontend dev server: http://localhost:5173 (proxies /api and /ws to :4000)
 | `production_lines` | Lines within a factory |
 | `machines` | Individual machines with type and metadata |
 | `machine_fields` | Dynamic telemetry field schema per machine |
-| `telemetry_raw` | TimescaleDB hypertable — 1s granularity JSONB |
+| `telemetry_raw` | TimescaleDB hypertable — 1s granularity JSONB (demo dataset) |
 | `telemetry_aggregates` | Pre-computed 1m/5m/1h/1d rollups |
 | `users` | Users with role-based access |
+| `user_organizations` | Membership join — one user, many orgs (admins bypass) |
 | `dashboards` | User-owned dashboard configurations |
 | `dashboard_widgets` | Widget layout + JSON config |
 | `alerts` | Alert rules with threshold conditions |
 | `alert_events` | Alert firing history with lifecycle |
 | `ai_conversations` | AI conversation sessions |
 | `ai_messages` | Messages + tool call records |
+| `ai_preview_drafts` | Per-user AI page view state — preview data _or_ selected dashboard |
+| `ai_boards` / `ai_board_charts` | Saved NL→SQL→ECharts charts from `/ask` |
 | `audit_logs` | Full audit trail |
+
+**Canonical model (real plants).** Registered upstream tables are drained into a
+narrow, plant-agnostic shape that `/ask` queries — see
+[`docs/onboarding-new-source.md`](docs/onboarding-new-source.md):
+
+| Table | Description |
+|---|---|
+| `source_tables` | Registry: one upstream table + how to read its timestamp/machine |
+| `source_metrics` | Which upstream columns become which canonical `field_key` |
+| `source_state` | Per-source watermark, last run, rows ingested, last error |
+| `series` | Identity of a signal: (machine, field_key, labels) |
+| `readings` | `(series_id, ts, value, quality)` — bad rows are flagged, never dropped |
 
 ### TimescaleDB setup
 
@@ -166,17 +189,26 @@ Two independent AI surfaces, both backed by an OpenAI-compatible chat completion
 
 Production runs on KKU GenAI: generation model `claude-sonnet-5` (`AI_MODEL`), router/verifier model `gpt-5.4-mini` (`AI_ROUTER_MODEL`).
 
-See [`docs/ai-pages.md`](docs/ai-pages.md) for the full end-to-end pipeline breakdown,
+Start with [`docs/llm2viz-flow.md`](docs/llm2viz-flow.md) — the one-picture map of the whole
+route (upstream DB → registry → normalizer → canonical → `/ask` → chart), with a table of which
+box lives in which file. Then
+[`docs/ai-pages.md`](docs/ai-pages.md) for the full end-to-end pipeline breakdown,
 [`docs/onboarding-new-source.md`](docs/onboarding-new-source.md) for registering a new upstream
 table/plant, and [`docs/ask-demo-test-results.md`](docs/ask-demo-test-results.md) for the latest
 `/ask/demo` full-loop results.
+
+**Demo recordings** — `Video_LLM2Viz/Ask.zip` contains `LLM2Viz.mp4` (the full
+question → SQL → chart loop) and `Ask_MHC.mp4` (the Mahachai plant scope).
 
 ---
 
 ## 🎛️ REST API Reference
 
 ```
+GET    /health
+
 POST   /api/auth/login
+POST   /api/auth/switch-org
 GET    /api/auth/me
 
 GET    /api/machines
@@ -186,11 +218,20 @@ PATCH  /api/machines/:id
 DELETE /api/machines/:id
 GET    /api/machines/:id/fields
 PUT    /api/machines/:id/fields
+DELETE /api/machines/:id/fields/:key
+GET    /api/machines/factories
+GET    /api/machines/production-lines
 
+GET    /api/telemetry/latest?ids=id1,id2
 GET    /api/telemetry/:machineId/latest
 GET    /api/telemetry/:machineId/series?field=weight&timeRange=1h
+GET    /api/telemetry/:machineId/aggregate
+GET    /api/telemetry/:machineId/daily-count
+GET    /api/telemetry/:machineId/hourly-count
+GET    /api/telemetry/:machineId/total-count
+GET    /api/telemetry/:machineId/count
+GET    /api/telemetry/:machineId/skus
 POST   /api/telemetry/:machineId/ingest
-GET    /api/telemetry/latest?ids=id1,id2
 
 GET    /api/dashboards
 POST   /api/dashboards
@@ -235,6 +276,11 @@ DELETE /api/ai/boards/:id/charts/:chartId
 POST   /api/led/token          # admin/editor only — generate per-org led-viewer JWT
 GET    /api/led/token
 DELETE /api/led/token
+
+GET    /api/admin/sources       # registered upstream tables + ingest state
+GET    /api/admin/sources/drift # upstream columns that changed since registration
+GET    /api/admin/machines/pending
+POST   /api/admin/machines/:id/confirm
 ```
 
 ---
@@ -307,7 +353,7 @@ JWT tokens expire after 24h (configurable via `JWT_EXPIRES_IN`).
 | Styling | TailwindCSS 3 |
 | Icons | lucide-vue-next |
 | HTTP client | Axios |
-| Backend runtime | Go 1.x |
+| Backend runtime | Go 1.26 |
 | Web framework | Fiber v2 |
 | Database driver | pgx v5 (no ORM — raw SQL) |
 | Database | PostgreSQL 16 + TimescaleDB |

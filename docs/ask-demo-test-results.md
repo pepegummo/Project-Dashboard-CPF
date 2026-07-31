@@ -1,50 +1,55 @@
-# /ask/demo full-loop live results — 2026-07-30 11:28
+# /ask/demo full-loop live results — 2026-07-31
 
 Model: `claude-sonnet-5` · router/judge: `gpt-5.4-mini` · provider: `https://gen.ai.kku.ac.th/api/v1/chat/completions`
 
-> ## 34 ผ่าน / 5 ตกเพราะโควตา — **ไม่มีเคสไหนตกเพราะ assertion**
+> ## ✅ 39/39 PASS — แต่เป็นผลรวมจาก 3 รอบ ไม่ใช่รอบเดียว
 >
-> ทุก FAIL ในตารางคือ `429 QUOTA_EXCEEDED` โควตารายวันหมดตอน **11:28:26** ที่เคสที่ 35
-> (`latest_all_machines_th` ยิงไปได้ 2 คอล = 7,567 tok แล้วคอลที่ 3 โดน
-> `401 {"error":"This model reached daily limit."}`) อีก 4 เคสถัดมาได้ `0 tok / 0.1s` คือไม่เคยถูกทดสอบ
+> **สวีตนี้ (247,915 tok) ใหญ่เกินโควตา 200k/วัน ราว 24% จึงรันจบในรอบเดียวไม่ได้**
+> ตารางด้านล่างประกอบจากรอบที่แต่ละเคสได้รันจริง:
 >
-> ### assertion ที่แก้เมื่อ 2026-07-29 ผ่านครบ ✅
+> | รอบ | เคส | ผล |
+> |---|---|---|
+> | 2026-07-30 11:28 (เต็มสวีต) | 34 เคสแรก | PASS ทั้งหมด · โควตาหมดที่เคส 35 |
+> | 2026-07-31 09:37 (`-run` 5 เคส, 28,792 tok) | `latest_all_machines_th` · `clarify_vague_th` · `clarify_vague_en` · `clarify_followup_reply_th` | PASS |
+> | 2026-07-31 (`-run` 1 เคส) | `production_trend_30d_th` | PASS หลังแก้ assertion |
 >
-> | เคส | 07-29 | 07-30 | ยืนยันอะไร |
-> |---|---|---|---|
-> | `sku_reject_today_th` | FAIL | **PASS** | `$1` แทน `now(` |
-> | `speed_24h_hourly_th` | FAIL | **PASS** | `$1` + `windowHours: 24` |
-> | `avg_throughput_7d_en` | FAIL | **PASS** | **โมเดลรายงาน `window_hours: 168` จริง** — ช่วง 7 วันตรวจผ่าน response ได้ |
-> | `temp_today_th` | FAIL | **PASS** | `$1` แทน `now(` |
-> | `followup_group_by_day_th` | FAIL | **PASS** | assertion ที่ลดเหลือ `time_bucket`+`cw-01` |
+> **สวีต LLM-half (`TestAskDataLiveQuestions`) ผ่าน 39/39 ในรอบเดียว** (266.8s, exit 0) —
+> ยืนยันว่า `askSchemaFixture` ที่ sync ให้ตรง `buildSchemaContext` ถูกต้อง
 >
-> การ sync `askSchemaFixture` ให้ตรง `buildSchemaContext` และอัปเดต `prevSpeedCW01` เป็นทรง
-> `%BUCKET%`/`$1`,`$2` ก็ได้ผล — 4 เคส `followup_*` ผ่านหมด
+> ### assertion ที่ค้างและแก้ไปแล้ว 6 เคส
 >
-> ### ปัญหาที่เหลือ: สวีตนี้ใหญ่เกินโควตาไปแล้ว
+> คอมมิต `5b438ab` (07-24) เปลี่ยนพรอมป์ต demo จาก `now() - interval` + `time_bucket('1 hour')`
+> เป็น `$1/$2` + `time_bucket('%BUCKET%')` (รองรับซูมโดยไม่เรียกโมเดลซ้ำ) แต่ `askCases`
+> และ `askSchemaFixture` ไม่ได้อัปเดตตาม — **โปรดักต์ไม่ได้พัง เทสตามไม่ทัน**
 >
-> **226,690 โทเคน** เทียบโควตา 200k/วัน — เกิน ~13% จึงรันไม่จบเป็นรอบที่สองติดกัน
-> (07-29 ใช้ 223,602 ตายที่เคส 34 · 07-30 ใช้ 226,690 ตายที่เคส 35)
+> | เคส | assertion เดิม | แก้เป็น |
+> |---|---|---|
+> | `sku_reject_today_th` | `now(` | `$1` |
+> | `temp_today_th` | `now(` | `$1` |
+> | `speed_24h_hourly_th` | `now() - interval` | `$1` + `windowHours: 24` |
+> | `avg_throughput_7d_en` | `interval '7` | `$1` + `windowHours: 168` |
+> | `production_trend_30d_th` | `interval '30` | `$1` + `windowHours: 720` |
+> | `followup_group_by_day_th` | `1 day` | `time_bucket` (เหตุผลด้านล่าง) |
 >
-> ต้นทุนต่อเคสสูงขึ้นจากรอบ 07-22 (183,542) ราว 23% — เห็นชัดในเคสที่ต้องคิดเรื่อง window:
-> `temp_today_th` 3,799 → 7,999 · `sku_reject_today_th` 3,798 → 7,368 · เข้าใจได้เพราะ
-> พรอมป์ตเรื่อง `$1/$2` + `window_hours` ยาวและบังคับมากกว่ากฎ `now() - interval` เดิม
+> เพิ่มฟิลด์ `windowHours` ใน `askCase` (0 = ไม่เช็ค) ให้ทั้งสองสวีตตรวจ — LLM-half อ่านจาก
+> `emission.WindowHours` · full-loop อ่านจาก `response.windowHours` · และ sync
+> `askSchemaFixture` (7 กฎ) + `prevSpeedCW01` + fixture ของ `TestVerifyAskChartLive`
 >
-> ### 5 เคสที่ยังไม่เคยได้รันจริงเลยทั้งสองรอบ
+> ### ⚠️ `followup_group_by_day_th` — ความสามารถที่หายไป ไม่ใช่ assertion ค้าง
 >
-> `latest_all_machines_th` · `production_trend_30d_th` · `clarify_vague_th` · `clarify_vague_en` ·
-> `clarify_followup_reply_th`
+> `autoBucket` (`nl2sql.go:139`) เลือก bucket จากความกว้าง window ล้วน ๆ โมเดลกำหนดเองไม่ได้
+> ('1 day' ต้องการ window > 100 วัน) คำสั่ง "จัดกลุ่มเป็นรายวันแทน" บนกราฟ 24 ชม. จึง**ทำไม่ได้จริง**
+> assertion ถูกลดเหลือเท่าที่ยังจริง — การคืนความสามารถนี้ต้องเพิ่มฟิลด์ bucket ใน emission
+> ไม่ใช่แก้เทส เป็นการตัดสินใจเชิงโปรดักต์ที่ยังค้างอยู่
 >
-> รันเฉพาะกลุ่มนี้ได้ในราคา ~30k โทเคน โดยไม่ต้องรันทั้งสวีต:
-> ```bash
-> cd backend && go test ./internal/modules/ai/ -v -timeout 30m \
->   -run 'AskDataFullLoopLive/(latest_all_machines_th|production_trend_30d_th|clarify_vague_th|clarify_vague_en|clarify_followup_reply_th)'
-> ```
-> ⚠️ คำสั่งนี้เขียนทับไฟล์นี้ด้วยตาราง 5 แถว (harness เขียนทุกครั้งที่จบ) — สำเนาตาราง 39 แถว
-> ไว้ก่อนรัน
+> ### ต้นทุนโตขึ้น 24% จากรอบ 07-22
+>
+> 183,542 → 247,915 tok · เห็นชัดในเคสที่ต้องคิดเรื่อง window (`temp_today_th` 3,799 → 7,999)
+> เพราะกฎ `$1/$2` + `window_hours` ยาวและบังคับกว่ากฎเดิม — **เป็นต้นทุนของฟีเจอร์ซูม ไม่ใช่บั๊ก**
+> รอบหน้าต้องแบ่งรัน หรือลดต้นทุนต่อเคสก่อน
 >
 > **สภาพแวดล้อม:** ชุด demo (`/ask/demo`) — เทสไม่ส่ง `dataset` จึงตกค่า default ของ
-> `schemaFor` (`nl2sql.go:363`) · `telemetry_raw` 2,188,796 แถว · `go test` exit 1 (จาก FAIL ที่เป็นโควตา)
+> `schemaFor` (`nl2sql.go:363`) · `telemetry_raw` 2,188,796 แถว
 
 | case | expect | result | tokens | time |
 |---|---|---|---|---|
@@ -82,10 +87,10 @@ Model: `claude-sonnet-5` · router/judge: `gpt-5.4-mini` · provider: `https://g
 | compare_throughput_cw01_vc01_en | sql | PASS | 8472 | 14.1s |
 | total_production_today_th | sql | PASS | 7977 | 18.9s |
 | speed_drops_when_th | sql | PASS | 7690 | 16.7s |
-| latest_all_machines_th | sql | FAIL | 7567 | 18.6s |
-| production_trend_30d_th | sql | FAIL | 0 | 0.1s |
-| clarify_vague_th | clarify | FAIL | 0 | 0.2s |
-| clarify_vague_en | clarify | FAIL | 0 | 0.0s |
-| clarify_followup_reply_th | sql | FAIL | 0 | 0.1s |
+| latest_all_machines_th | sql | PASS | 4643 | 8.5s |
+| production_trend_30d_th | sql | PASS | 8523 | 22.0s |
+| clarify_vague_th | clarify | PASS | 3787 | 5.2s |
+| clarify_vague_en | clarify | PASS | 3675 | 4.7s |
+| clarify_followup_reply_th | sql | PASS | 8164 | 13.0s |
 
-**TOTAL: 39 rows · 226690 tokens · 564.3s**
+**TOTAL: 39 rows · 247915 tokens (รวม 3 รอบ) · 39/39 PASS**

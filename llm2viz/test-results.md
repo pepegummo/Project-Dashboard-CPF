@@ -234,16 +234,17 @@ focused widget รู้แบบ deterministic จากมาร์ค `[FOCUS
   > - **07-29** 28 ผ่าน / 5 ตกเพราะ assertion เก่าค้าง / 6 โควตาหมด (223,602 tok)
   >   เหตุ: `5b438ab` (07-24) เปลี่ยนพรอมป์ต demo เป็น `$1/$2` + `time_bucket('%BUCKET%')`
   >   แต่ `askCases` **และ `askSchemaFixture`** ไม่ได้อัปเดตตาม
-  > - **07-30** แก้ assertion + sync fixture แล้วรันใหม่ → **34 ผ่าน / 5 ตกเพราะโควตาล้วน
-  >   ไม่มีเคสไหนตกเพราะ assertion** · 5 เคสที่เคยตกผ่านครบ
+  > - **07-30** แก้ assertion + sync fixture แล้วรันใหม่ → 34 ผ่าน / 5 ตกเพราะโควตาล้วน
+  > - **07-31** ยิง 5 เคสที่เหลือด้วย `-run` (28,792 tok) → 4 ผ่าน · `production_trend_30d_th`
+  >   ตกด้วย assertion ค้างตัวสุดท้าย (`interval '30`) แก้เป็น `windowHours: 720` แล้วผ่าน
   >
-  > **สวีตนี้ใหญ่เกินโควตาไปแล้ว** — 226,690 tok เทียบเพดาน 200k/วัน (สูงกว่ารอบ 07-22 ราว 23%
-  > เพราะพรอมป์ตเรื่อง window ยาวขึ้น) รันจบในวันเดียวไม่ได้สองรอบติด
-  > เหลือ 5 เคสที่ยังไม่เคยรันจริง — ยิงเฉพาะกลุ่มด้วย `-run` ได้ในราคา ~30k
-  > รายละเอียดครบใน `docs/ask-demo-test-results.md`
+  > **สถานะปัจจุบัน: 39/39 PASS** — แต่เป็นผลรวมจาก 3 รอบ เพราะสวีตนี้ (247,915 tok)
+  > ใหญ่เกินโควตา 200k/วัน ราว 24% · รวม 6 เคสที่ assertion ค้างตั้งแต่ `5b438ab` (07-24)
+  > · สวีต LLM-half (`TestAskDataLiveQuestions`) ผ่าน **39/39 ในรอบเดียว** ยืนยัน
+  > `askSchemaFixture` ที่ sync แล้ว · รายละเอียดครบใน `docs/ask-demo-test-results.md`
   - กลุ่ม: clarify/adversarial ~2.7–4.8k (ถูกสุด — decline/clarify ไม่เดินวงเต็ม), sql ~3.3–8.4k,
     notdata/prose ~4.5–6.1k
-  - **/ask ถูกกว่า /ai chat ต่อเคสมาก** (~4.7k vs ~11.4k, §11): /ask ใช้ prompt เฉพาะทาง
+  - **/ask ถูกกว่า /ai chat ต่อเคส** (~6.4k vs ~11.4k หลังวัดใหม่ 07-30/31; เดิม ~4.7k, §11): /ask ใช้ prompt เฉพาะทาง
     (`emitSQL`/`emitEChart`) ไม่ re-ship `systemPromptUnified` + 12 tool schemas ทุกรอบเหมือน chat loop
 - **Router bake-off** (`TestRouterBakeOff`, mini only, 130.5s): **27/32** หน้าไฟล์ — แต่ 2 เคส
   (`read-speed`, `english-read`) เป็น **0-token decline** (blip 0.00s ใกล้เพดาน OpenAI pool หลังรัน

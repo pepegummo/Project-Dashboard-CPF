@@ -153,7 +153,10 @@ var askCases = []askCase{
 	{name: "total_production_today_th", question: "ผลผลิตรวมของโรงงานวันนี้", expect: "sql", sqlHas: []string{"v_telemetry"}}, // "today" may be interval '1 day' or date_trunc('day', now()) — both valid
 	{name: "speed_drops_when_th", question: "ช่วงไหนของวัน speed ตกบ่อยสุด", expect: "sql", sqlHas: []string{"speed"}},
 	{name: "latest_all_machines_th", question: "ข้อมูลล่าสุดของทุกเครื่อง", expect: "sql", sqlHas: []string{"v_telemetry"}},
-	{name: "production_trend_30d_th", question: "แนวโน้มการผลิต 30 วันที่ผ่านมา", expect: "sql", sqlHas: []string{"time_bucket", "interval '30"}},
+	// Same stale-assertion class as the five fixed on 07-29: the 30-day span moved out of
+	// the SQL text into window_hours (30d = 720h). Missed in that pass because the quota
+	// died before this case ever ran.
+	{name: "production_trend_30d_th", question: "แนวโน้มการผลิต 30 วันที่ผ่านมา", expect: "sql", sqlHas: []string{"time_bucket", "$1"}, windowHours: 720},
 
 	// ── Clarification (B3) — vague enough that no metric/machine is identifiable ──
 	{name: "clarify_vague_th", question: "ขอดูข้อมูลหน่อย", expect: "clarify"},
